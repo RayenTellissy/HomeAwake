@@ -30,7 +30,7 @@ func sudo(_ command: [String]) -> Bool {
     return ok
 }
 
-func apply(stayAwake: Bool, lidClosed: Bool, terminating: Bool = false) {
+func apply(stayAwake: Bool, sleepAfterRelease: Bool) {
     if stayAwake, assertion == nil {
         var id = IOPMAssertionID(0)
         let result = IOPMAssertionCreateWithName(
@@ -45,8 +45,8 @@ func apply(stayAwake: Bool, lidClosed: Bool, terminating: Bool = false) {
         assertion = nil
     }
     let plan = planSleepSwitch(stayAwake: stayAwake, sleepDisabled: rootDomainFlag("SleepDisabled"),
-                               owned: ownsSleepSwitch, canWrite: sudoGrantsLidMode(), lidClosed: lidClosed,
-                               terminating: terminating)
+                               owned: ownsSleepSwitch, canWrite: sudoGrantsLidMode(),
+                               sleepAfterRelease: sleepAfterRelease)
     if let value = plan.write, !sudo(value ? Pmset.preventSleep : Pmset.allowSleep) { return }
     ownsSleepSwitch = plan.owned
     if plan.sleepNow { sleepNow() }
@@ -75,7 +75,7 @@ func reconcile(arpAttempt: Int = 0) {
     let snapshot = Snapshot(power: power, network: network, lidClosed: rootDomainFlag("AppleClamshellState"))
     let prefs = load(Prefs.self, from: Files.prefs) ?? Prefs()
     observed = snapshot
-    apply(stayAwake: decide(snapshot, prefs) == .stayAwake, lidClosed: snapshot.lidClosed)
+    apply(stayAwake: decide(snapshot, prefs) == .stayAwake, sleepAfterRelease: snapshot.lidClosed)
     saveStatus()
     if router != nil, network == nil, arpAttempt < 4 {
         let retry = DispatchWorkItem { reconcile(arpAttempt: arpAttempt + 1) }
@@ -107,7 +107,8 @@ IONotificationPortSetDispatchQueue(powerPort, .main)
 signal(SIGTERM, SIG_IGN)
 let terminate = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
 terminate.setEventHandler {
-    apply(stayAwake: false, lidClosed: false, terminating: true)
+    // launchd also sends SIGTERM at logout and shutdown, and a forced sleep then would cut off a remote restart.
+    apply(stayAwake: false, sleepAfterRelease: false)
     saveStatus()
     exit(0)
 }

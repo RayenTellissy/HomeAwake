@@ -117,7 +117,7 @@ public struct SleepSwitchPlan: Equatable, Sendable {
 }
 
 public func planSleepSwitch(stayAwake: Bool, sleepDisabled: Bool, owned: Bool, canWrite: @autoclosure () -> Bool,
-                            lidClosed: Bool, terminating: Bool) -> SleepSwitchPlan {
+                            sleepAfterRelease: Bool) -> SleepSwitchPlan {
     let leave = SleepSwitchPlan(write: nil, owned: owned)
     switch (stayAwake, sleepDisabled, owned) {
     case (true, true, _):
@@ -125,7 +125,7 @@ public func planSleepSwitch(stayAwake: Bool, sleepDisabled: Bool, owned: Bool, c
     case (true, false, _):
         return canWrite() ? SleepSwitchPlan(write: true, owned: true) : leave
     case (false, true, true):
-        return canWrite() ? SleepSwitchPlan(write: false, owned: false, sleepNow: lidClosed && !terminating) : leave
+        return canWrite() ? SleepSwitchPlan(write: false, owned: false, sleepNow: sleepAfterRelease) : leave
     case (false, false, _), (false, true, false):
         return SleepSwitchPlan(write: nil, owned: false)
     }
