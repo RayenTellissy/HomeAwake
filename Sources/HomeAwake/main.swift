@@ -11,7 +11,7 @@ func agentService() -> (loaded: Bool, running: Bool) {
     return (print.ok, print.output.contains("state = running"))
 }
 
-func installAgent() throws {
+func ensureAgentInstalled() throws {
     let agent = Bundle.main.executableURL!.deletingLastPathComponent().appending(path: "homeawake-agent")
     let plist = launchAgentPlist(agentPath: agent.path)
     let loaded = agentService().loaded
@@ -30,7 +30,7 @@ func updatePrefs(_ change: (inout Prefs) -> Void) throws {
     var prefs = load(Prefs.self, from: Files.prefs) ?? Prefs()
     change(&prefs)
     try save(prefs, to: Files.prefs)
-    notify_post(prefsChanged)
+    notify_post(reconcileRequested)
 }
 
 func setUpLidMode() throws {
@@ -43,7 +43,7 @@ func setUpLidMode() throws {
         guard error[NSAppleScript.errorNumber] as? Int != Int(userCanceledErr) else { return }
         throw Failure(errorDescription: error[NSAppleScript.errorMessage] as? String ?? "Setup failed.")
     }
-    notify_post(prefsChanged)
+    notify_post(reconcileRequested)
 }
 
 func remove() {
@@ -60,12 +60,12 @@ NSApplication.shared.setActivationPolicy(.regular)
 NSApp.activate()
 
 var problem: String?
-do { try installAgent() } catch { problem = error.localizedDescription }
+do { try ensureAgentInstalled() } catch { problem = error.localizedDescription }
 
 while true {
     let prefs = load(Prefs.self, from: Files.prefs) ?? Prefs()
     let snapshot = load(AgentStatus.self, from: Files.status)?.snapshot
-    let lidMode = lidModeAvailable()
+    let lidMode = sudoGrantsLidMode()
 
     let alert = NSAlert()
     alert.messageText = switch (agentService().running, snapshot) {

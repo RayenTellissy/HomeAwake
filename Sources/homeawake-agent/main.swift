@@ -45,7 +45,7 @@ func apply(stayAwake: Bool, lidClosed: Bool, terminating: Bool = false) {
         assertion = nil
     }
     let plan = planSleepSwitch(stayAwake: stayAwake, sleepDisabled: rootDomainFlag("SleepDisabled"),
-                               owned: ownsSleepSwitch, canWrite: lidModeAvailable(), lidClosed: lidClosed,
+                               owned: ownsSleepSwitch, canWrite: sudoGrantsLidMode(), lidClosed: lidClosed,
                                terminating: terminating)
     if let value = plan.write, !sudo(value ? Pmset.preventSleep : Pmset.allowSleep) { return }
     ownsSleepSwitch = plan.owned
@@ -90,7 +90,7 @@ SCDynamicStoreSetDispatchQueue(store, .main)
 var token = Int32(0)
 // IOPSNotificationCreateRunLoopSource would also fire on every battery percentage change.
 notify_register_dispatch(kIOPSNotifyPowerSource, &token, .main) { _ in reconcile() }
-notify_register_dispatch(prefsChanged, &token, .main) { _ in reconcile() }
+notify_register_dispatch(reconcileRequested, &token, .main) { _ in reconcile() }
 
 var rootPort = io_connect_t(0)
 var powerPort: IONotificationPortRef?

@@ -10,7 +10,7 @@ pid=
 trap '[ -z "$pid" ] || kill -TERM $pid 2>/dev/null || true; rm -rf "$home"' EXIT
 assertions() { pmset -g assertions | grep -c "pid $pid(homeawake-agent).*PreventUserIdleSystemSleep" || true; }
 expect() { [ "$2" = "$3" ] && echo "ok: $1" || { echo "FAIL: $1 (got $2, want $3)"; exit 1; }; }
-prefs() { printf '%s' "$1" > "$support/prefs.json"; notifyutil -p dev.homeawake.prefs; sleep 0.5; }
+prefs() { printf '%s' "$1" > "$support/prefs.json"; notifyutil -p dev.homeawake.reconcile; sleep 0.5; }
 sleep_disabled() { pmset -g | awk '/SleepDisabled/ {print $2}'; }
 real_status() { stat -f %m "$HOME/Library/Application Support/HomeAwake/status.json" 2>/dev/null || echo absent; }
 start() { CFFIXED_USER_HOME="$home" scripts/sandboxed.sh "$agent" 2>> "$home/stderr" & pid=$!; sleep 1; }
@@ -41,7 +41,7 @@ expect "pause releases it" "$(assertions)" 0
 
 prefs "$at_home"
 expect "resume takes it again" "$(assertions)" 1
-notifyutil -p dev.homeawake.prefs; notifyutil -p dev.homeawake.prefs; sleep 0.5
+notifyutil -p dev.homeawake.reconcile; notifyutil -p dev.homeawake.reconcile; sleep 0.5
 expect "repeated reconciles keep exactly one" "$(assertions)" 1
 
 stop

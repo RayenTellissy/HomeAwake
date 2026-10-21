@@ -1,6 +1,6 @@
 import Foundation
 
-public let prefsChanged = "dev.homeawake.prefs"
+public let reconcileRequested = "dev.homeawake.reconcile"
 
 public enum Files {
     static let home = FileManager.default.homeDirectoryForCurrentUser
@@ -24,7 +24,7 @@ public func save(_ value: some Encodable, to url: URL) throws {
     try data.write(to: url, options: .atomic)
 }
 
-public func lidModeAvailable() -> Bool {
+public func sudoGrantsLidMode() -> Bool {
     grantsLidMode(sudoList: run(["/usr/bin/sudo", "-n", "-l"]).output)
 }
 
