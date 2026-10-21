@@ -116,7 +116,7 @@ sudo rm /etc/sudoers.d/homeawake
 swift build -c release
 swift test
 scripts/build-app.sh
-scripts/check-agent.sh     # holds a sleep assertion for a few seconds under a scratch HOME
+scripts/check-agent.sh     # holds a sleep assertion for a few seconds under a scratch CFFIXED_USER_HOME
 scripts/measure-agent.sh   # five 70 s runs: footprint, idle wakeups, and CPU, with the median and range
 ```
 

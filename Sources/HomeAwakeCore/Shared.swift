@@ -3,7 +3,7 @@ import Foundation
 public let prefsChanged = "dev.homeawake.prefs"
 
 public enum Files {
-    static let home = URL(fileURLWithPath: getenv("HOME").map { String(cString: $0) } ?? NSHomeDirectory())
+    static let home = FileManager.default.homeDirectoryForCurrentUser
     public static let prefs = home.appending(path: "Library/Application Support/HomeAwake/prefs.json")
     public static let status = home.appending(path: "Library/Application Support/HomeAwake/status.json")
     public static let launchAgent = home.appending(path: "Library/LaunchAgents/\(agentLabel).plist")

@@ -12,7 +12,7 @@ summary() { sort -n | awk '{v[NR] = $1} END {printf "median %s, range %s to %s, 
 footprints=() wakeups=()
 for run in $(seq "$runs"); do
     home=$(mktemp -d)
-    HOME="$home" scripts/sandboxed.sh "$agent" & pid=$!
+    CFFIXED_USER_HOME="$home" scripts/sandboxed.sh "$agent" & pid=$!
     sleep 10
     kb=$(( $(footprint -f bytes -p $pid | sed -n 's/.*Footprint: \([0-9]*\) B.*/\1/p') / 1024 ))
     rss=$(ps -o rss= -p $pid | tr -d ' ')

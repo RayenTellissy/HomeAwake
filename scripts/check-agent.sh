@@ -12,7 +12,8 @@ assertions() { pmset -g assertions | grep -c "pid $pid(homeawake-agent).*Prevent
 expect() { [ "$2" = "$3" ] && echo "ok: $1" || { echo "FAIL: $1 (got $2, want $3)"; exit 1; }; }
 prefs() { printf '%s' "$1" > "$support/prefs.json"; notifyutil -p dev.homeawake.prefs; sleep 0.5; }
 sleep_disabled() { pmset -g | awk '/SleepDisabled/ {print $2}'; }
-start() { HOME="$home" scripts/sandboxed.sh "$agent" 2>> "$home/stderr" & pid=$!; sleep 1; }
+real_status() { stat -f %m "$HOME/Library/Application Support/HomeAwake/status.json" 2>/dev/null || echo absent; }
+start() { CFFIXED_USER_HOME="$home" scripts/sandboxed.sh "$agent" 2>> "$home/stderr" & pid=$!; sleep 1; }
 stop() { kill -TERM $pid; wait $pid && status=0 || status=$?; }
 owns() { grep -c '"ownsSleepSwitch" : true' "$support/status.json" || true; }
 claim() { printf '{"ownsSleepSwitch": true, "snapshot": {"power": "ac", "lidClosed": false}}' > "$support/status.json"; }
@@ -28,6 +29,7 @@ mac=$(arp -n "$router" | awk '{print $4}')
 at_home="{\"enabled\": true, \"homes\": [\"$mac\"]}"
 paused='{"enabled": false, "homes": []}'
 before=$(sleep_disabled)
+real_before=$(real_status)
 
 printf '%s' "$at_home" > "$support/prefs.json"
 start
@@ -70,5 +72,6 @@ else
     echo "skip: ownership rows need SleepDisabled 0, and it is $before"
 fi
 
+expect "the real home's status.json is untouched" "$(real_status)" "$real_before"
 expect "SleepDisabled unchanged" "$(sleep_disabled)" "$before"
 expect "agent logged nothing, so it attempted no write" "$(wc -c < "$home/stderr" | tr -d ' ')" 0
