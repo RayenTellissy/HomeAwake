@@ -16,7 +16,7 @@ real_status() { stat -f %m "$HOME/Library/Application Support/HomeAwake/status.j
 start() { CFFIXED_USER_HOME="$home" scripts/sandboxed.sh "$@" "$agent" 2>> "$home/stderr" & pid=$!; sleep 1; }
 stop() { kill -TERM $pid; wait $pid && status=0 || status=$?; }
 owns() { grep -c '"ownsSleepSwitch" : true' "$support/status.json" || true; }
-claim() { printf '{"ownsSleepSwitch": true, "snapshot": {"power": "ac", "lidClosed": false}}' > "$support/status.json"; }
+claim() { printf '{"ownsSleepSwitch": true, "snapshot": {"power": "ac"}}' > "$support/status.json"; }
 tried_sudo() {
     sleep 1
     log show --last 2m --style compact \

@@ -44,12 +44,10 @@ public struct NetworkID: Hashable, Codable, Sendable {
 public struct Snapshot: Equatable, Codable, Sendable {
     public var power: PowerSource
     public var network: NetworkID?
-    public var lidClosed: Bool
 
-    public init(power: PowerSource, network: NetworkID?, lidClosed: Bool) {
+    public init(power: PowerSource, network: NetworkID?) {
         self.power = power
         self.network = network
-        self.lidClosed = lidClosed
     }
 }
 
@@ -108,26 +106,24 @@ public struct SleepSwitchPlan: Equatable, Sendable {
     public var write: Bool?
     /// Whether HomeAwake owns the switch once the write succeeds. A failed write leaves ownership as it was.
     public var owned: Bool
-    /// Put the Mac to sleep after the write, so a Mac unplugged with the lid shut does not stay awake in a bag.
-    public var sleepNow: Bool
 
-    public init(write: Bool?, owned: Bool, sleepNow: Bool = false) {
+    public init(write: Bool?, owned: Bool) {
         self.write = write
         self.owned = owned
-        self.sleepNow = sleepNow
     }
 }
 
-public func planSleepSwitch(stayAwake: Bool, sleepDisabled: Bool, owned: Bool, canWrite: @autoclosure () -> Bool,
-                            sleepAfterRelease: Bool) -> SleepSwitchPlan {
-    let leave = SleepSwitchPlan(write: nil, owned: owned)
+/// `canWrite` guards only turning the switch on, so HomeAwake never turns on a switch it could not turn off. Turning
+/// its own switch off just tries the write, and a failed `sudo -n` keeps ownership.
+public func planSleepSwitch(stayAwake: Bool, sleepDisabled: Bool, owned: Bool, canWrite: @autoclosure () -> Bool)
+    -> SleepSwitchPlan {
     switch (stayAwake, sleepDisabled, owned) {
     case (true, true, _):
-        return leave
+        return SleepSwitchPlan(write: nil, owned: owned)
     case (true, false, _):
-        return canWrite() ? SleepSwitchPlan(write: true, owned: true) : leave
+        return canWrite() ? SleepSwitchPlan(write: true, owned: true) : SleepSwitchPlan(write: nil, owned: owned)
     case (false, true, true):
-        return canWrite() ? SleepSwitchPlan(write: false, owned: false, sleepNow: sleepAfterRelease) : leave
+        return SleepSwitchPlan(write: false, owned: false)
     case (false, false, _), (false, true, false):
         return SleepSwitchPlan(write: nil, owned: false)
     }

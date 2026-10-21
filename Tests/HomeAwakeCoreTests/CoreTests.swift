@@ -19,7 +19,7 @@ let cafe = NetworkID(mac: "00:11:22:33:44:55")!
         (.ac, home, Prefs(), .allowSleep(.notHome)),
     ]
     for (power, network, prefs, decision) in rows {
-        #expect(decide(Snapshot(power: power, network: network, lidClosed: true), prefs) == decision,
+        #expect(decide(Snapshot(power: power, network: network), prefs) == decision,
                 "\(power) \(String(describing: network)) \(prefs)")
     }
 }
@@ -68,7 +68,7 @@ let cafe = NetworkID(mac: "00:11:22:33:44:55")!
     let url = FileManager.default.temporaryDirectory.appending(path: "homeawake-\(UUID())/status.json")
     defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
     let old = Date(timeIntervalSince1970: 1_000_000)
-    let snapshot = Snapshot(power: .ac, network: home, lidClosed: false)
+    let snapshot = Snapshot(power: .ac, network: home)
     func modified() throws -> Date? { try FileManager.default.attributesOfItem(atPath: url.path)[.modificationDate] as? Date }
 
     try save(snapshot, to: url)
@@ -76,8 +76,8 @@ let cafe = NetworkID(mac: "00:11:22:33:44:55")!
     try save(snapshot, to: url)
     #expect(try modified() == old)
 
-    try save(Snapshot(power: .battery, network: nil, lidClosed: true), to: url)
-    #expect(load(Snapshot.self, from: url) == Snapshot(power: .battery, network: nil, lidClosed: true))
+    try save(Snapshot(power: .battery, network: nil), to: url)
+    #expect(load(Snapshot.self, from: url) == Snapshot(power: .battery, network: nil))
     #expect(try modified() != old)
 }
 
@@ -85,13 +85,12 @@ let cafe = NetworkID(mac: "00:11:22:33:44:55")!
     let url = FileManager.default.temporaryDirectory.appending(path: "homeawake-\(UUID())/status.json")
     defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
 
-    let status = AgentStatus(snapshot: Snapshot(power: .ac, network: home, lidClosed: true), ownsSleepSwitch: true)
+    let status = AgentStatus(snapshot: Snapshot(power: .ac, network: home), ownsSleepSwitch: true)
     try save(status, to: url)
     #expect(try String(contentsOf: url, encoding: .utf8) == """
         {
           "ownsSleepSwitch" : true,
           "snapshot" : {
-            "lidClosed" : true,
             "network" : "c4:0f:5e:10:07:c0",
             "power" : "ac"
           }
@@ -99,7 +98,11 @@ let cafe = NetworkID(mac: "00:11:22:33:44:55")!
         """)
     #expect(load(AgentStatus.self, from: url) == status)
 
-    try Data(#"{"power": "ac", "lidClosed": false}"#.utf8).write(to: url)
+    try Data(#"{"ownsSleepSwitch": true, "snapshot": {"power": "ac", "lidClosed": true}}"#.utf8).write(to: url)
+    #expect(load(AgentStatus.self, from: url) == AgentStatus(snapshot: Snapshot(power: .ac, network: nil),
+                                                              ownsSleepSwitch: true))
+
+    try Data(#"{"power": "ac"}"#.utf8).write(to: url)
     #expect(load(AgentStatus.self, from: url) == nil)
 }
 
@@ -206,10 +209,8 @@ let sudoListHeader = """
     #expect(!grantsLidMode(sudoList: ""))
 }
 
-func plan(stayAwake: Bool, on: Bool, owned: Bool, canWrite: Bool = true, sleepAfterRelease: Bool = false)
-    -> SleepSwitchPlan {
-    planSleepSwitch(stayAwake: stayAwake, sleepDisabled: on, owned: owned, canWrite: canWrite,
-                    sleepAfterRelease: sleepAfterRelease)
+func plan(stayAwake: Bool, on: Bool, owned: Bool, canWrite: Bool = true) -> SleepSwitchPlan {
+    planSleepSwitch(stayAwake: stayAwake, sleepDisabled: on, owned: owned, canWrite: canWrite)
 }
 
 @Test func stayAwakeTurnsTheSwitchOnAndTakesOwnership() {
@@ -225,42 +226,28 @@ func plan(stayAwake: Bool, on: Bool, owned: Bool, canWrite: Bool = true, sleepAf
 @Test func allowSleepTurnsOffOnlyItsOwnSwitch() {
     #expect(plan(stayAwake: false, on: true, owned: true) == SleepSwitchPlan(write: false, owned: false))
     #expect(plan(stayAwake: false, on: true, owned: false) == SleepSwitchPlan(write: nil, owned: false))
-    #expect(plan(stayAwake: false, on: true, owned: false, sleepAfterRelease: true) == SleepSwitchPlan(write: nil, owned: false))
 }
 
 @Test func allowSleepDropsOwnershipOfASwitchThatIsAlreadyOff() {
     #expect(plan(stayAwake: false, on: false, owned: true) == SleepSwitchPlan(write: nil, owned: false))
-    #expect(plan(stayAwake: false, on: false, owned: true, canWrite: false) == SleepSwitchPlan(write: nil, owned: false))
-    #expect(plan(stayAwake: false, on: false, owned: false, sleepAfterRelease: true) == SleepSwitchPlan(write: nil, owned: false))
 }
 
-@Test func releasingOwnSwitchSleepsOnlyWhenAsked() {
-    #expect(plan(stayAwake: false, on: true, owned: true, sleepAfterRelease: true)
-        == SleepSwitchPlan(write: false, owned: false, sleepNow: true))
-    #expect(plan(stayAwake: false, on: true, owned: true, sleepAfterRelease: false)
-        == SleepSwitchPlan(write: false, owned: false, sleepNow: false))
-    #expect(plan(stayAwake: true, on: false, owned: false, sleepAfterRelease: true)
-        == SleepSwitchPlan(write: true, owned: true, sleepNow: false))
-}
-
-@Test func withoutARuleNothingIsWrittenAndOwnershipStays() {
+@Test func withoutARuleNothingTurnsTheSwitchOnButReleasingStillTries() {
     #expect(plan(stayAwake: true, on: false, owned: false, canWrite: false) == SleepSwitchPlan(write: nil, owned: false))
     #expect(plan(stayAwake: true, on: false, owned: true, canWrite: false) == SleepSwitchPlan(write: nil, owned: true))
-    #expect(plan(stayAwake: false, on: true, owned: true, canWrite: false, sleepAfterRelease: true)
-        == SleepSwitchPlan(write: nil, owned: true))
+    #expect(plan(stayAwake: false, on: true, owned: true, canWrite: false)
+        == SleepSwitchPlan(write: false, owned: false))
 }
 
-@Test func checksTheRuleOnlyWhenAWriteIsDue() {
+@Test func checksTheRuleOnlyBeforeTurningTheSwitchOn() {
     var checks = 0
     func canWrite() -> Bool { checks += 1; return true }
-    for (stayAwake, on, owned) in [(true, true, false), (true, true, true), (false, false, true), (false, true, false)] {
-        _ = planSleepSwitch(stayAwake: stayAwake, sleepDisabled: on, owned: owned, canWrite: canWrite(),
-                            sleepAfterRelease: true)
+    let rows = [(true, true, false), (false, true, true), (false, true, false), (false, false, true)]
+    for (stayAwake, on, owned) in rows {
+        _ = planSleepSwitch(stayAwake: stayAwake, sleepDisabled: on, owned: owned, canWrite: canWrite())
     }
     #expect(checks == 0)
-    _ = planSleepSwitch(stayAwake: true, sleepDisabled: false, owned: false, canWrite: canWrite(),
-                        sleepAfterRelease: false)
-    _ = planSleepSwitch(stayAwake: false, sleepDisabled: true, owned: true, canWrite: canWrite(),
-                        sleepAfterRelease: false)
-    #expect(checks == 2)
+    #expect(planSleepSwitch(stayAwake: true, sleepDisabled: false, owned: false, canWrite: canWrite())
+        == SleepSwitchPlan(write: true, owned: true))
+    #expect(checks == 1)
 }

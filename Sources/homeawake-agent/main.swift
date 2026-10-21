@@ -24,7 +24,9 @@ func sudo(_ command: [String]) -> Bool {
     return ok
 }
 
-func apply(stayAwake: Bool, sleepAfterRelease: Bool) {
+/// True when it just turned off the switch HomeAwake owned.
+@discardableResult
+func apply(stayAwake: Bool) -> Bool {
     if stayAwake, assertion == nil {
         var id = IOPMAssertionID(0)
         let result = IOPMAssertionCreateWithName(
@@ -39,11 +41,10 @@ func apply(stayAwake: Bool, sleepAfterRelease: Bool) {
         assertion = nil
     }
     let plan = planSleepSwitch(stayAwake: stayAwake, sleepDisabled: rootDomainFlag("SleepDisabled"),
-                               owned: ownsSleepSwitch, canWrite: sudoGrantsLidMode(),
-                               sleepAfterRelease: sleepAfterRelease)
-    if let value = plan.write, !sudo(value ? Pmset.preventSleep : Pmset.allowSleep) { return }
+                               owned: ownsSleepSwitch, canWrite: sudoGrantsLidMode())
+    if let value = plan.write, !sudo(value ? Pmset.preventSleep : Pmset.allowSleep) { return false }
     ownsSleepSwitch = plan.owned
-    if plan.sleepNow { sleepNow() }
+    return plan.write == false
 }
 
 func sleepNow() {
@@ -66,13 +67,16 @@ func reconcile(arpAttempt: Int = 0) {
     let network = router.flatMap { NetworkID(arpOutput: run(["/usr/sbin/arp", "-n", $0]).output) }
     let providing = IOPSGetProvidingPowerSourceType(IOPSCopyPowerSourcesInfo().takeRetainedValue())
     let power: PowerSource = providing?.takeUnretainedValue() as String? == kIOPMACPowerKey ? .ac : .battery
-    let snapshot = Snapshot(power: power, network: network, lidClosed: rootDomainFlag("AppleClamshellState"))
+    let snapshot = Snapshot(power: power, network: network)
     let prefs = load(Prefs.self, from: Files.prefs) ?? Prefs()
     observed = snapshot
     switch decide(snapshot, prefs) {
     case .hold: break
-    case .stayAwake: apply(stayAwake: true, sleepAfterRelease: snapshot.lidClosed)
-    case .allowSleep: apply(stayAwake: false, sleepAfterRelease: snapshot.lidClosed)
+    case .stayAwake: apply(stayAwake: true)
+    case .allowSleep(let reason):
+        let released = apply(stayAwake: false)
+        // So a Mac unplugged with the lid shut does not stay awake in a bag.
+        if released, reason == .onBattery, rootDomainFlag(kAppleClamshellStateKey) { sleepNow() }
     }
     saveStatus()
     if router != nil, network == nil, arpAttempt < 4 {
@@ -105,8 +109,9 @@ IONotificationPortSetDispatchQueue(powerPort, .main)
 signal(SIGTERM, SIG_IGN)
 let terminate = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
 terminate.setEventHandler {
-    // launchd also sends SIGTERM at logout and shutdown, and a forced sleep then would cut off a remote restart.
-    apply(stayAwake: false, sleepAfterRelease: false)
+    // No forced sleep here. launchd also sends SIGTERM at logout and shutdown, and a sleep then would cut off a remote
+    // restart.
+    apply(stayAwake: false)
     saveStatus()
     exit(0)
 }
