@@ -158,3 +158,60 @@ let otherToolEntry = """
     #expect(!listsLidModeRule(sudoListHeader + ours.replacingOccurrences(of: ", /usr/bin/pmset sleepnow", with: "")))
     #expect(!listsLidModeRule(""))
 }
+
+func plan(stayAwake: Bool, on: Bool, owned: Bool, canWrite: Bool = true, lidClosed: Bool = false,
+          terminating: Bool = false) -> SleepSwitchPlan {
+    planSleepSwitch(stayAwake: stayAwake, sleepDisabled: on, owned: owned, canWrite: canWrite, lidClosed: lidClosed,
+                    terminating: terminating)
+}
+
+@Test func stayAwakeTurnsTheSwitchOnAndTakesOwnership() {
+    #expect(plan(stayAwake: true, on: false, owned: false) == SleepSwitchPlan(write: true, owned: true))
+    #expect(plan(stayAwake: true, on: false, owned: true) == SleepSwitchPlan(write: true, owned: true))
+}
+
+@Test func stayAwakeLeavesAnotherToolsSwitchWithThatTool() {
+    #expect(plan(stayAwake: true, on: true, owned: false) == SleepSwitchPlan(write: nil, owned: false))
+    #expect(plan(stayAwake: true, on: true, owned: true) == SleepSwitchPlan(write: nil, owned: true))
+}
+
+@Test func allowSleepTurnsOffOnlyItsOwnSwitch() {
+    #expect(plan(stayAwake: false, on: true, owned: true) == SleepSwitchPlan(write: false, owned: false))
+    #expect(plan(stayAwake: false, on: true, owned: false) == SleepSwitchPlan(write: nil, owned: false))
+    #expect(plan(stayAwake: false, on: true, owned: false, lidClosed: true) == SleepSwitchPlan(write: nil, owned: false))
+}
+
+@Test func allowSleepDropsOwnershipOfASwitchThatIsAlreadyOff() {
+    #expect(plan(stayAwake: false, on: false, owned: true) == SleepSwitchPlan(write: nil, owned: false))
+    #expect(plan(stayAwake: false, on: false, owned: true, canWrite: false) == SleepSwitchPlan(write: nil, owned: false))
+    #expect(plan(stayAwake: false, on: false, owned: false, lidClosed: true) == SleepSwitchPlan(write: nil, owned: false))
+}
+
+@Test func turningOwnSwitchOffWithTheLidClosedSleepsUnlessTerminating() {
+    #expect(plan(stayAwake: false, on: true, owned: true, lidClosed: true)
+        == SleepSwitchPlan(write: false, owned: false, sleepNow: true))
+    #expect(plan(stayAwake: false, on: true, owned: true, lidClosed: true, terminating: true)
+        == SleepSwitchPlan(write: false, owned: false, sleepNow: false))
+}
+
+@Test func withoutARuleNothingIsWrittenAndOwnershipStays() {
+    #expect(plan(stayAwake: true, on: false, owned: false, canWrite: false) == SleepSwitchPlan(write: nil, owned: false))
+    #expect(plan(stayAwake: true, on: false, owned: true, canWrite: false) == SleepSwitchPlan(write: nil, owned: true))
+    #expect(plan(stayAwake: false, on: true, owned: true, canWrite: false, lidClosed: true)
+        == SleepSwitchPlan(write: nil, owned: true))
+}
+
+@Test func checksTheRuleOnlyWhenAWriteIsDue() {
+    var checks = 0
+    func canWrite() -> Bool { checks += 1; return true }
+    for (stayAwake, on, owned) in [(true, true, false), (true, true, true), (false, false, true), (false, true, false)] {
+        _ = planSleepSwitch(stayAwake: stayAwake, sleepDisabled: on, owned: owned, canWrite: canWrite(),
+                            lidClosed: true, terminating: false)
+    }
+    #expect(checks == 0)
+    _ = planSleepSwitch(stayAwake: true, sleepDisabled: false, owned: false, canWrite: canWrite(), lidClosed: false,
+                        terminating: false)
+    _ = planSleepSwitch(stayAwake: false, sleepDisabled: true, owned: true, canWrite: canWrite(), lidClosed: false,
+                        terminating: false)
+    #expect(checks == 2)
+}

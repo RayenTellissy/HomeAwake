@@ -84,3 +84,36 @@ public func statusLine(_ decision: Decision, lidModeInstalled: Bool) -> String {
     case .allowSleep(.notHome): "Not on a home network. This Mac sleeps normally."
     }
 }
+
+/// What to do with the global `SleepDisabled` switch. Other tools write the same switch, so HomeAwake turns it off
+/// only when it was the one that turned it on.
+public struct SleepSwitchPlan: Equatable, Sendable {
+    /// The value to write, or nil to leave the switch alone.
+    public var write: Bool?
+    /// Whether HomeAwake owns the switch once the write succeeds. A failed write leaves ownership as it was.
+    public var owned: Bool
+    /// Put the Mac to sleep after the write, so a Mac unplugged with the lid shut does not stay awake in a bag.
+    public var sleepNow: Bool
+
+    public init(write: Bool?, owned: Bool, sleepNow: Bool = false) {
+        self.write = write
+        self.owned = owned
+        self.sleepNow = sleepNow
+    }
+}
+
+/// `canWrite` costs a sudo spawn, so it is evaluated only when the plan would write.
+public func planSleepSwitch(stayAwake: Bool, sleepDisabled: Bool, owned: Bool, canWrite: @autoclosure () -> Bool,
+                            lidClosed: Bool, terminating: Bool) -> SleepSwitchPlan {
+    let leave = SleepSwitchPlan(write: nil, owned: owned)
+    switch (stayAwake, sleepDisabled, owned) {
+    case (true, true, _):
+        return leave
+    case (true, false, _):
+        return canWrite() ? SleepSwitchPlan(write: true, owned: true) : leave
+    case (false, true, true):
+        return canWrite() ? SleepSwitchPlan(write: false, owned: false, sleepNow: lidClosed && !terminating) : leave
+    case (false, false, _), (false, true, false):
+        return SleepSwitchPlan(write: nil, owned: false)
+    }
+}
