@@ -194,25 +194,6 @@ func withScratchFile(_ body: (URL) throws -> Void) throws {
         == nil)
 }
 
-@Test func statusLineText() {
-    #expect(statusLine(.stayAwake, sleepDisabled: true) == "Awake at home, even with the lid closed.")
-    #expect(statusLine(.stayAwake, sleepDisabled: false)
-        == "Awake at home while the lid is open. Closing the lid still sleeps.")
-    #expect(statusLine(.allowSleep(.notHome), sleepDisabled: true) == "Not on a home network. This Mac sleeps normally.")
-    #expect(statusLine(.hold, sleepDisabled: true)
-        == "No network right now. HomeAwake keeps the Mac as it was until the network is back.")
-    let decisions: [Decision] = [.stayAwake, .allowSleep(.paused), .allowSleep(.onBattery), .allowSleep(.notHome),
-                                 .hold]
-    #expect(Set(decisions.map { statusLine($0, sleepDisabled: false) }).count == decisions.count)
-}
-
-@Test func infoLineText() {
-    #expect(infoLine(network: home, lidModeAvailable: true)
-        == "This network's router is c4:0f:5e:10:07:c0. Lid-closed mode is available.")
-    #expect(infoLine(network: nil, lidModeAvailable: false)
-        == "No router found on this network. Lid-closed mode is not set up.")
-}
-
 @Test func runReportsExitStatusAndOutput() {
     #expect(run(["/bin/echo", "c4:f:a6"]) == (true, "c4:f:a6\n"))
     #expect(run(["/bin/sh", "-c", "echo partial; echo noise >&2; exit 3"]) == (false, "partial\n"))
@@ -304,40 +285,42 @@ func menu(_ decision: Decision?, running: Bool = true, switchOn: Bool = false, n
               enabled: enabled, lidModeAvailable: lidMode)
 }
 
-let menuFooter: [MenuRow] = [.separator, .action("Hide menu bar icon", .hideIcon), .action("Remove HomeAwake", .remove)]
-let homeInfo = MenuRow.info("This network's router is c4:0f:5e:10:07:c0. Lid-closed mode is available.")
+let menuFooter: [MenuRow] = [.separator, .action("Hide Menu Bar Icon", .hideIcon), .action("Quit HomeAwake", .quit)]
+let keepAwake = MenuRow.toggle("Keep Awake at Home", isOn: true, .pause)
+let thisIsHome = MenuRow.toggle("This Is My Home Network", isOn: true, .forgetHome(home))
+let lidSetup = MenuRow.action("Stay Awake with the Lid Closed…", .setUpLidMode)
+let awakeLidClosed = Headline("Your Mac is staying awake",
+                              "You're home and plugged in, so your phone can reach it, even with the lid closed.",
+                              awake: true)
 
 @Test func menuBeforeTheAgentWritesStatus() {
     let s = menu(nil)
-    #expect(menuRows(s) == [.info("HomeAwake is starting."), homeInfo, .separator,
-                            .action("Forget this home network", .forgetHome(home)), .action("Pause", .pause)]
-        + menuFooter)
+    #expect(menuRows(s) == [.headline(Headline("HomeAwake is starting", "It's checking your network and power.")),
+                            .separator, keepAwake, thisIsHome] + menuFooter)
     #expect(iconSymbol(s) == "moon.zzz")
 }
 
-@Test func menuWhenTheAgentIsNotRunning() {
+@Test func menuWhenTheAgentIsNotRunningOffersToStartIt() {
     let s = menu(.stayAwake, running: false, switchOn: true)
-    #expect(menuRows(s) == [.info("The HomeAwake agent is not running."), homeInfo, .separator,
-                            .action("Forget this home network", .forgetHome(home)), .action("Pause", .pause)]
-        + menuFooter)
+    #expect(menuRows(s) == [
+        .headline(Headline("HomeAwake is not running", "Start it again to keep your Mac awake at home.")), .separator,
+        .action("Start HomeAwake", .start), keepAwake, thisIsHome,
+    ] + menuFooter)
     #expect(iconSymbol(s) == "moon.zzz")
 }
 
 @Test func menuAwakeAtHomeWithTheSwitchOn() {
     let s = menu(.stayAwake, switchOn: true)
-    #expect(menuRows(s) == [.info("Awake at home, even with the lid closed."), homeInfo, .separator,
-                            .action("Forget this home network", .forgetHome(home)), .action("Pause", .pause)]
-        + menuFooter)
+    #expect(menuRows(s) == [.headline(awakeLidClosed), .separator, keepAwake, thisIsHome] + menuFooter)
     #expect(iconSymbol(s) == "sun.max.fill")
 }
 
 @Test func menuAwakeAtHomeWithTheSwitchOffAndNoLidMode() {
     let s = menu(.stayAwake, lidMode: false)
     #expect(menuRows(s) == [
-        .info("Awake at home while the lid is open. Closing the lid still sleeps."),
-        .info("This network's router is c4:0f:5e:10:07:c0. Lid-closed mode is not set up."), .separator,
-        .action("Forget this home network", .forgetHome(home)), .action("Pause", .pause),
-        .action("Set up lid-closed mode…", .setUpLidMode),
+        .headline(Headline("Your Mac is staying awake",
+                           "You're home and plugged in. Closing the lid will still put it to sleep.", awake: true)),
+        .separator, keepAwake, thisIsHome, lidSetup,
     ] + menuFooter)
     #expect(iconSymbol(s) == "sun.max")
 }
@@ -345,35 +328,35 @@ let homeInfo = MenuRow.info("This network's router is c4:0f:5e:10:07:c0. Lid-clo
 @Test func menuOnANetworkThatIsNotHome() {
     let s = menu(.allowSleep(.notHome), network: cafe, isHome: false)
     #expect(menuRows(s) == [
-        .info("Not on a home network. This Mac sleeps normally."),
-        .info("This network's router is 00:11:22:33:44:55. Lid-closed mode is available."), .separator,
-        .action("Use this network as home", .useAsHome(cafe)), .action("Pause", .pause),
+        .headline(Headline("Your Mac sleeps as usual", "This isn't your home network.")), .separator,
+        keepAwake, .toggle("This Is My Home Network", isOn: false, .useAsHome(cafe)),
     ] + menuFooter)
     #expect(iconSymbol(s) == "moon.zzz")
 }
 
 @Test func menuWhilePaused() {
     let s = menu(.allowSleep(.paused), enabled: false)
-    #expect(menuRows(s) == [.info("Paused. This Mac sleeps normally."), homeInfo, .separator,
-                            .action("Forget this home network", .forgetHome(home)), .action("Resume", .resume)]
-        + menuFooter)
+    #expect(menuRows(s) == [
+        .headline(Headline("HomeAwake is off", "Your Mac sleeps as usual.")), .separator,
+        .toggle("Keep Awake at Home", isOn: false, .resume), thisIsHome,
+    ] + menuFooter)
     #expect(iconSymbol(s) == "moon.zzz")
 }
 
 @Test func menuOnBattery() {
     let s = menu(.allowSleep(.onBattery), switchOn: true)
-    #expect(menuRows(s) == [.info("On battery. This Mac sleeps normally."), homeInfo, .separator,
-                            .action("Forget this home network", .forgetHome(home)), .action("Pause", .pause)]
-        + menuFooter)
+    #expect(menuRows(s) == [
+        .headline(Headline("Your Mac sleeps as usual", "It's on battery. HomeAwake works only while it's plugged in.")),
+        .separator, keepAwake, thisIsHome,
+    ] + menuFooter)
     #expect(iconSymbol(s) == "moon.zzz")
 }
 
 @Test func menuHoldingWithNoNetwork() {
     let s = menu(.hold, switchOn: true, network: nil, isHome: false)
     #expect(menuRows(s) == [
-        .info("No network right now. HomeAwake keeps the Mac as it was until the network is back."),
-        .info("No router found on this network. Lid-closed mode is available."), .separator,
-        .action("Pause", .pause),
+        .headline(Headline("Waiting for a network", "Your Mac stays as it is until the network is back.")),
+        .separator, keepAwake,
     ] + menuFooter)
     #expect(iconSymbol(s) == "wifi.slash")
 }
@@ -381,9 +364,8 @@ let homeInfo = MenuRow.info("This network's router is c4:0f:5e:10:07:c0. Lid-clo
 @Test func menuPausedWithNoNetworkAndNoLidMode() {
     let s = menu(.allowSleep(.paused), network: nil, isHome: false, enabled: false, lidMode: false)
     #expect(menuRows(s) == [
-        .info("Paused. This Mac sleeps normally."),
-        .info("No router found on this network. Lid-closed mode is not set up."), .separator,
-        .action("Resume", .resume), .action("Set up lid-closed mode…", .setUpLidMode),
+        .headline(Headline("HomeAwake is off", "Your Mac sleeps as usual.")), .separator,
+        .toggle("Keep Awake at Home", isOn: false, .resume), lidSetup,
     ] + menuFooter)
     #expect(iconSymbol(s) == "moon.zzz")
 }

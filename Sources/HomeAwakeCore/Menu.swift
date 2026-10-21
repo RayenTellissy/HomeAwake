@@ -22,26 +22,54 @@ public struct MenuState: Equatable, Sendable {
 }
 
 public enum MenuAction: Equatable, Sendable {
-    case useAsHome(NetworkID), forgetHome(NetworkID), pause, resume, setUpLidMode, hideIcon, remove
+    case start, useAsHome(NetworkID), forgetHome(NetworkID), pause, resume, setUpLidMode, hideIcon, quit
 }
 
-public enum MenuRow: Equatable, Sendable { case info(String), action(String, MenuAction), separator }
+/// The top of the menu, written for someone who wants to know whether their phone can reach the Mac right now.
+public struct Headline: Equatable, Sendable {
+    public var title: String
+    public var detail: String
+    public var awake: Bool
+
+    public init(_ title: String, _ detail: String, awake: Bool = false) {
+        self.title = title
+        self.detail = detail
+        self.awake = awake
+    }
+}
+
+public enum MenuRow: Equatable, Sendable {
+    case headline(Headline), toggle(String, isOn: Bool, MenuAction), action(String, MenuAction), separator
+}
+
+func headline(_ s: MenuState) -> Headline {
+    switch (s.agentRunning, s.decision) {
+    case (false, _): Headline("HomeAwake is not running", "Start it again to keep your Mac awake at home.")
+    case (true, nil): Headline("HomeAwake is starting", "It's checking your network and power.")
+    case (true, .stayAwake?) where s.sleepDisabled:
+        Headline("Your Mac is staying awake",
+                 "You're home and plugged in, so your phone can reach it, even with the lid closed.", awake: true)
+    case (true, .stayAwake?):
+        Headline("Your Mac is staying awake",
+                 "You're home and plugged in. Closing the lid will still put it to sleep.", awake: true)
+    case (true, .allowSleep(.paused)?): Headline("HomeAwake is off", "Your Mac sleeps as usual.")
+    case (true, .allowSleep(.onBattery)?):
+        Headline("Your Mac sleeps as usual", "It's on battery. HomeAwake works only while it's plugged in.")
+    case (true, .allowSleep(.notHome)?): Headline("Your Mac sleeps as usual", "This isn't your home network.")
+    case (true, .hold?): Headline("Waiting for a network", "Your Mac stays as it is until the network is back.")
+    }
+}
 
 public func menuRows(_ s: MenuState) -> [MenuRow] {
-    let status = switch (s.agentRunning, s.decision) {
-    case (false, _): "The HomeAwake agent is not running."
-    case (true, nil): "HomeAwake is starting."
-    case let (true, decision?): statusLine(decision, sleepDisabled: s.sleepDisabled)
-    }
-    var rows: [MenuRow] = [.info(status), .info(infoLine(network: s.network, lidModeAvailable: s.lidModeAvailable)),
-                           .separator]
+    var rows: [MenuRow] = [.headline(headline(s)), .separator]
+    if !s.agentRunning { rows.append(.action("Start HomeAwake", .start)) }
+    rows.append(.toggle("Keep Awake at Home", isOn: s.enabled, s.enabled ? .pause : .resume))
     if let network = s.network {
-        rows.append(s.isHome ? .action("Forget this home network", .forgetHome(network))
-                             : .action("Use this network as home", .useAsHome(network)))
+        rows.append(.toggle("This Is My Home Network", isOn: s.isHome,
+                            s.isHome ? .forgetHome(network) : .useAsHome(network)))
     }
-    rows.append(s.enabled ? .action("Pause", .pause) : .action("Resume", .resume))
-    if !s.lidModeAvailable { rows.append(.action("Set up lid-closed mode…", .setUpLidMode)) }
-    return rows + [.separator, .action("Hide menu bar icon", .hideIcon), .action("Remove HomeAwake", .remove)]
+    if !s.lidModeAvailable { rows.append(.action("Stay Awake with the Lid Closed…", .setUpLidMode)) }
+    return rows + [.separator, .action("Hide Menu Bar Icon", .hideIcon), .action("Quit HomeAwake", .quit)]
 }
 
 /// An SF Symbol name.

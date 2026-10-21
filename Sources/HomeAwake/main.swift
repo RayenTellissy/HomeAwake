@@ -70,13 +70,14 @@ func remove() {
 
 func carryOut(_ action: MenuAction) throws {
     switch action {
+    case .start: if try ensureInstalled(.agent) { requestReconcile() }
     case .useAsHome(let network): try updatePrefs { $0.homes.insert(network) }
     case .forgetHome(let network): try updatePrefs { $0.homes.remove(network) }
     case .pause: try updatePrefs { $0.enabled = false }
     case .resume: try updatePrefs { $0.enabled = true }
     case .setUpLidMode: try setUpLidMode()
     case .hideIcon: uninstall(.menu); exit(0)
-    case .remove: remove(); exit(0)
+    case .quit: remove(); exit(0)
     }
 }
 
@@ -128,14 +129,46 @@ func carryOut(_ action: MenuAction) throws {
         menu.items = menuRows(state).map { row in
             switch row {
             case .separator: return .separator()
-            case .info(let text): return NSMenuItem(title: text, action: nil, keyEquivalent: "")
-            case .action(let title, let action):
-                let item = NSMenuItem(title: title, action: #selector(choose(_:)), keyEquivalent: "")
-                item.target = self
-                item.representedObject = action
+            case .headline(let headline): return headlineItem(headline, symbol: iconSymbol(state))
+            case .action(let title, let action): return actionItem(title, action)
+            case .toggle(let title, let isOn, let action):
+                let item = actionItem(title, action)
+                item.state = isOn ? .on : .off
                 return item
             }
         }
+    }
+
+    func actionItem(_ title: String, _ action: MenuAction) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: #selector(choose(_:)), keyEquivalent: "")
+        item.target = self
+        item.representedObject = action
+        return item
+    }
+
+    /// A view instead of a plain item, because AppKit greys out every item that has no action.
+    func headlineItem(_ headline: Headline, symbol: String) -> NSMenuItem {
+        let image = NSImageView(image: NSImage(systemSymbolName: symbol, accessibilityDescription: nil) ?? NSImage())
+        image.symbolConfiguration = .init(pointSize: 20, weight: .regular)
+        image.contentTintColor = headline.awake ? .systemOrange : .secondaryLabelColor
+        let title = NSTextField(labelWithString: headline.title)
+        title.font = .boldSystemFont(ofSize: NSFont.systemFontSize)
+        let detail = NSTextField(wrappingLabelWithString: headline.detail)
+        detail.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+        detail.textColor = .secondaryLabelColor
+        detail.preferredMaxLayoutWidth = 230
+        let text = NSStackView(views: [title, detail])
+        text.orientation = .vertical
+        text.alignment = .leading
+        text.spacing = 2
+        let row = NSStackView(views: [image, text])
+        row.alignment = .top
+        row.spacing = 10
+        row.edgeInsets = NSEdgeInsets(top: 6, left: 14, bottom: 6, right: 14)
+        row.frame.size = row.fittingSize
+        let item = NSMenuItem()
+        item.view = row
+        return item
     }
 
     @objc func choose(_ sender: NSMenuItem) {

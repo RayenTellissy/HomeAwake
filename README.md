@@ -17,12 +17,12 @@ address without Location permission, unlike the network name.
 	```
 
 2. Copy `build/HomeAwake.app` to `/Applications`.
-3. Open HomeAwake. It installs its background agent and its menu bar icon, then opens the icon's menu. The first
-   line shows the current status. The line under it names this network's router and says whether lid-closed mode is
-   available.
-4. At home, choose **Use this network as home**. HomeAwake saves the router named in that line.
+3. Open HomeAwake. It installs its background agent and its menu bar icon, then opens the icon's menu. The top
+   of the menu says whether your Mac is staying awake, and why.
+4. At home, choose **This Is My Home Network**. HomeAwake saves this network's router.
 
-Click the icon whenever you want to see the status, pause, or change the home network. Opening HomeAwake from
+Click the icon whenever you want to see what HomeAwake is doing. **Keep Awake at Home** turns HomeAwake off and on,
+and **This Is My Home Network** adds or removes the network you are on. Opening HomeAwake from
 Spotlight or Finder opens the same menu. If you move the app, open it once from the new place so the agent and the
 icon follow.
 
@@ -36,7 +36,10 @@ The icon shows what HomeAwake is doing:
 - `moon.zzz` means the Mac sleeps normally, because HomeAwake is paused, on battery, or on another network, or
   because the agent is not running.
 
-The icon is a separate program from the agent. To take the icon away, choose **Hide menu bar icon**. HomeAwake keeps
+The top of the menu shows the same symbol, orange while the Mac is staying awake, with a sentence that says why. If
+the agent is not running, the menu says so and offers **Start HomeAwake**.
+
+The icon is a separate program from the agent. To take the icon away, choose **Hide Menu Bar Icon**. HomeAwake keeps
 working, and the icon stays away after you log in again. To bring it back, open HomeAwake from Spotlight or Finder.
 
 ## Keep the Mac awake with the lid closed
@@ -55,7 +58,7 @@ Lid-closed mode needs a sudoers rule that lets your user run these two commands 
 HomeAwake reads `sudo -n -l` to find out whether any rule grants both. If another tool already installed such a rule,
 lid-closed mode is available right away, and there is nothing to set up. When sudo says no, the agent does not ask
 again until you open the HomeAwake menu or change a setting, so a rule another tool installs later takes effect the
-next time you open the menu. Otherwise, choose **Set up lid-closed mode…**
+next time you open the menu. Otherwise, choose **Stay Awake with the Lid Closed…**
 and enter your password once. HomeAwake installs `/etc/sudoers.d/homeawake` with exactly those two commands. `visudo`
 checks the rule before it goes live.
 
@@ -80,7 +83,7 @@ The agent reads ownership back from `status.json` when it starts, so a crash or 
 HomeAwake has two programs in one app bundle.
 
 - `HomeAwake` is the menu bar icon. It runs as a LaunchAgent (`~/Library/LaunchAgents/dev.homeawake.menu.plist`)
-  in your login session. launchd restarts it after a crash, but not after **Hide menu bar icon**. It has no timer. It
+  in your login session. launchd restarts it after a crash, but not after **Hide Menu Bar Icon**. It has no timer. It
   redraws the icon when the agent writes a new status, and it looks up the router and the sudo rule only when you
   open its menu.
 - `homeawake-agent` runs all the time as a LaunchAgent (`~/Library/LaunchAgents/dev.homeawake.agent.plist`) with
@@ -101,7 +104,7 @@ Measured on a MacBook Pro with Apple M5 and macOS 26.6:
 
 The menu bar icon costs more than the agent, because it links AppKit. Measured on the same Mac as launchd runs it,
 after its menu had been opened once, it used 14 MB `phys_footprint`, 0 idle wakeups over 60 seconds, and 0.01 s of
-CPU in that minute. Hide menu bar icon gives that memory back, and the agent keeps working.
+CPU in that minute. Hide Menu Bar Icon gives that memory back, and the agent keeps working.
 
 Keeping a Mac awake uses more wall power than letting it sleep. That cost comes from the awake Mac, not from the
 agent, and HomeAwake pays it only at home on AC power.
@@ -122,13 +125,14 @@ agent, and HomeAwake pays it only at home on AC power.
   bar app writes it.
 - `~/Library/Application Support/HomeAwake/status.json` holds what the agent last saw and whether HomeAwake owns
   `disablesleep`. The agent writes it, and only when that changes. After each such write it posts the Darwin
-  notification `dev.homeawake.status`, which the icon listens for. **Remove HomeAwake** also writes it when the agent
+  notification `dev.homeawake.status`, which the icon listens for. **Quit HomeAwake** also writes it when the agent
   was not running to turn the switch off itself.
 
-## Remove HomeAwake
+## Quit or remove HomeAwake
 
-Click the HomeAwake icon and choose **Remove HomeAwake**. It stops the agent, turns `disablesleep` off if HomeAwake
-owns it, and deletes both LaunchAgents, so the icon goes away too. Your settings stay in
+Click the HomeAwake icon and choose **Quit HomeAwake**. It stops the agent, turns `disablesleep` off if HomeAwake owns
+it, and deletes both LaunchAgents, so the icon goes away and HomeAwake does not start at your next login. Open
+HomeAwake to start it again. To remove it, quit it and move HomeAwake.app to the Trash. Your settings stay in
 `~/Library/Application Support/HomeAwake`. The lid-closed rule stays too. If HomeAwake installed it, you can delete
 it with this command:
 

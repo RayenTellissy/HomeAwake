@@ -83,22 +83,6 @@ public func decide(_ s: Snapshot, _ p: Prefs) -> Decision {
     return p.homes.contains(network) ? .stayAwake : .allowSleep(.notHome)
 }
 
-public func statusLine(_ decision: Decision, sleepDisabled: Bool) -> String {
-    switch decision {
-    case .stayAwake where sleepDisabled: "Awake at home, even with the lid closed."
-    case .stayAwake: "Awake at home while the lid is open. Closing the lid still sleeps."
-    case .allowSleep(.paused): "Paused. This Mac sleeps normally."
-    case .allowSleep(.onBattery): "On battery. This Mac sleeps normally."
-    case .allowSleep(.notHome): "Not on a home network. This Mac sleeps normally."
-    case .hold: "No network right now. HomeAwake keeps the Mac as it was until the network is back."
-    }
-}
-
-public func infoLine(network: NetworkID?, lidModeAvailable: Bool) -> String {
-    let router = network.map { "This network's router is \($0.gatewayMAC)." } ?? "No router found on this network."
-    return router + (lidModeAvailable ? " Lid-closed mode is available." : " Lid-closed mode is not set up.")
-}
-
 /// What to do with the global `SleepDisabled` switch. Other tools write the same switch, so HomeAwake turns it off
 /// only when it was the one that turned it on.
 public struct SleepSwitchPlan: Equatable, Sendable {
