@@ -70,10 +70,12 @@ The agent has no timer. It wakes only when the power source switches between AC 
 changes, when the Mac wakes from sleep, or when you change a setting. Right after a network change, it can retry the
 router lookup up to four times over 30 seconds.
 
-Measured on a MacBook Pro with Apple M5 and macOS 26.6, over five runs of `scripts/measure-agent.sh`:
+Measured on a MacBook Pro with Apple M5 and macOS 26.6:
 
-- Memory (`phys_footprint` 10 seconds after launch) was 2528 to 2608 KB, with a median of 2608 KB. RSS was about
-  8 MB, most of it system libraries that other processes share.
+- Memory (`phys_footprint` 10 seconds after launch) ranged from 2048 to 2656 KB over two sets of five runs, with
+  medians of 2048 KB and 2608 KB. A bare run loop with the same event
+  sources and no work measures about 1.8 MB, so HomeAwake's own code adds 0.25 to 0.8 MB. RSS was about 8 MB, most of
+  it system libraries that other processes share.
 - Idle wakeups over 60 seconds were 0 in every run.
 - CPU time over 70 seconds was `00:00.01` in `top` in every run, which is its smallest step of 10 ms.
 
