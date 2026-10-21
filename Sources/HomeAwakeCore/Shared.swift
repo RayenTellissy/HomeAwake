@@ -76,7 +76,10 @@ public func run(_ argv: [String]) -> (ok: Bool, output: String) {
     var pid = pid_t(0)
     let spawned = posix_spawn(&pid, argv[0], &actions, nil, cArgs, environ)
     close(writeEnd)
-    guard spawned == 0 else { return (false, "") }
+    guard spawned == 0 else {
+        NSLog("posix_spawn %@ failed: errno %d, %s", argv[0], spawned, strerror(spawned))
+        return (false, "")
+    }
 
     var output: [UInt8] = []
     var chunk = [UInt8](repeating: 0, count: 4096)

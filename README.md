@@ -123,5 +123,8 @@ scripts/check-agent.sh     # holds a sleep assertion for a few seconds under a s
 scripts/measure-agent.sh   # five 70 s runs: footprint, idle wakeups, and CPU, with the median and range
 ```
 
-Both scripts run the agent through `scripts/sandboxed.sh`, which blocks it from running `sudo` or `pmset`, so a test
-run cannot change `disablesleep` even on a Mac where a sudoers rule allows it.
+Both scripts source `scripts/scratch-agent.sh`, which runs the agent through `scripts/sandboxed.sh` with a scratch
+`CFFIXED_USER_HOME`. The sandbox blocks the agent from running `sudo` or `pmset`, so a test run cannot change
+`disablesleep` even on a Mac where a sudoers rule allows it. The agent logs each blocked spawn to stderr, and
+`check-agent.sh` reads those lines. `check-agent.sh` also builds `scripts/no-router.c` with `clang` and loads it into
+one agent run to take the router away while the agent holds its assertion.
