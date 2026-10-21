@@ -75,8 +75,9 @@ let cafe = NetworkID(mac: "00:11:22:33:44:55")!
     try FileManager.default.setAttributes([.modificationDate: old], ofItemAtPath: url.path)
     try save(snapshot, to: url)
     #expect(try modified() == old)
+    #expect(try writeIfChanged(Data(contentsOf: url), to: url) == false)
 
-    try save(Snapshot(power: .battery, network: nil), to: url)
+    #expect(try writeIfChanged(Data(#"{"power":"battery"}"#.utf8), to: url) == true)
     #expect(load(Snapshot.self, from: url) == Snapshot(power: .battery, network: nil))
     #expect(try modified() != old)
 }

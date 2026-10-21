@@ -1,7 +1,7 @@
 import Foundation
 
 public let agentLabel = "dev.homeawake.agent"
-public let sudoersPath = "/etc/sudoers.d/homeawake"
+let sudoersPath = "/etc/sudoers.d/homeawake"
 
 /// The exact argument vectors the sudoers rule allows.
 enum Pmset {

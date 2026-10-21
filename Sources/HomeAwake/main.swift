@@ -12,14 +12,13 @@ func agentService() -> (loaded: Bool, running: Bool) {
 }
 
 func ensureAgentInstalled() throws {
-    let agent = Bundle.main.executableURL!.deletingLastPathComponent().appending(path: "homeawake-agent")
-    let plist = try launchAgentPlist(agentPath: agent.path)
+    guard let agent = Bundle.main.url(forAuxiliaryExecutable: "homeawake-agent") else {
+        throw Failure(errorDescription: "The HomeAwake agent is missing from the app.")
+    }
+    let changed = try writeIfChanged(launchAgentPlist(agentPath: agent.path), to: Files.launchAgent)
     let loaded = agentService().loaded
-    guard (try? Data(contentsOf: Files.launchAgent)) != plist || !loaded else { return }
+    guard changed || !loaded else { return }
     if loaded { run(["/bin/launchctl", "bootout", service]) }
-    try FileManager.default.createDirectory(
-        at: Files.launchAgent.deletingLastPathComponent(), withIntermediateDirectories: true)
-    try plist.write(to: Files.launchAgent, options: .atomic)
     guard run(["/bin/launchctl", "bootstrap", "gui/\(getuid())", Files.launchAgent.path]).ok else {
         throw Failure(errorDescription: "launchctl could not load the HomeAwake agent.")
     }

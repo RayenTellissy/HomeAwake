@@ -4,10 +4,10 @@ import IOKit
 public let reconcileRequested = "dev.homeawake.reconcile"
 
 public enum Files {
-    static let home = FileManager.default.homeDirectoryForCurrentUser
-    public static let prefs = home.appending(path: "Library/Application Support/HomeAwake/prefs.json")
-    public static let status = home.appending(path: "Library/Application Support/HomeAwake/status.json")
-    public static let launchAgent = home.appending(path: "Library/LaunchAgents/\(agentLabel).plist")
+    static let support = URL.applicationSupportDirectory.appending(path: "HomeAwake")
+    public static let prefs = support.appending(path: "prefs.json")
+    public static let status = support.appending(path: "status.json")
+    public static let launchAgent = URL.libraryDirectory.appending(path: "LaunchAgents/\(agentLabel).plist")
 }
 
 public func load<T: Decodable>(_ type: T.Type, from url: URL) -> T? {
@@ -15,14 +15,17 @@ public func load<T: Decodable>(_ type: T.Type, from url: URL) -> T? {
     return try? JSONDecoder().decode(type, from: data)
 }
 
-/// Leaves the file untouched when its content would not change.
+public func writeIfChanged(_ data: Data, to url: URL) throws -> Bool {
+    guard (try? Data(contentsOf: url)) != data else { return false }
+    try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try data.write(to: url, options: .atomic)
+    return true
+}
+
 public func save(_ value: some Encodable, to url: URL) throws {
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-    let data = try encoder.encode(value)
-    guard (try? Data(contentsOf: url)) != data else { return }
-    try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-    try data.write(to: url, options: .atomic)
+    _ = try writeIfChanged(encoder.encode(value), to: url)
 }
 
 private let rootDomain = IOServiceGetMatchingService(kIOMainPortDefault, IOServiceMatching("IOPMrootDomain"))

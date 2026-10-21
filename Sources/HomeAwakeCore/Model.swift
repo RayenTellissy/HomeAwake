@@ -62,8 +62,8 @@ public struct AgentStatus: Equatable, Codable, Sendable {
 }
 
 public struct Prefs: Codable, Equatable, Sendable {
-    public var enabled = true
-    public var homes: Set<NetworkID> = []
+    public var enabled: Bool
+    public var homes: Set<NetworkID>
 
     public init(enabled: Bool = true, homes: Set<NetworkID> = []) {
         self.enabled = enabled

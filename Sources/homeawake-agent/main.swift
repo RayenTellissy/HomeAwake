@@ -10,7 +10,7 @@ let canSystemSleep: UInt32 = 0xE000_0270
 let systemWillSleep: UInt32 = 0xE000_0280
 let systemHasPoweredOn: UInt32 = 0xE000_0300
 
-let ipv4Key = "State:/Network/Global/IPv4" as CFString
+let ipv4Key = SCDynamicStoreKeyCreateNetworkGlobalEntity(nil, kSCDynamicStoreDomainState, kSCEntNetIPv4)
 let store = SCDynamicStoreCreate(nil, "homeawake-agent" as CFString, { _, _, _ in reconcile() }, nil)!
 var assertion: IOPMAssertionID?
 var arpRetry: DispatchWorkItem?
@@ -54,7 +54,7 @@ func saveStatus() {
 
 func reconcile(arpAttempt: Int = 0) {
     arpRetry?.cancel()
-    let router = (SCDynamicStoreCopyValue(store, ipv4Key) as? [String: Any])?["Router"] as? String
+    let router = (SCDynamicStoreCopyValue(store, ipv4Key) as? [String: Any])?[kSCPropNetIPv4Router as String] as? String
     let network = router.flatMap { NetworkID(arpOutput: run(["/usr/sbin/arp", "-n", $0]).output) }
     let providing = IOPSGetProvidingPowerSourceType(IOPSCopyPowerSourcesInfo().takeRetainedValue())
     let power: PowerSource = providing?.takeUnretainedValue() as String? == kIOPMACPowerKey ? .ac : .battery
