@@ -86,9 +86,9 @@ public func decide(_ s: Snapshot, _ p: Prefs) -> Decision {
     return p.homes.contains(network) ? .stayAwake : .allowSleep(.notHome)
 }
 
-public func statusLine(_ decision: Decision, lidModeInstalled: Bool) -> String {
+public func statusLine(_ decision: Decision, lidModeAvailable: Bool) -> String {
     switch decision {
-    case .stayAwake where lidModeInstalled: "Awake at home, even with the lid closed."
+    case .stayAwake where lidModeAvailable: "Awake at home, even with the lid closed."
     case .stayAwake: "Awake at home while the lid is open. Closing the lid still sleeps."
     case .allowSleep(.paused): "Paused. This Mac sleeps normally."
     case .allowSleep(.onBattery): "On battery. This Mac sleeps normally."

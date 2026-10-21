@@ -96,8 +96,8 @@ let cafe = NetworkID(mac: "00:11:22:33:44:55")!
 }
 
 @Test func sudoersRuleText() {
-    #expect(sudoersRule(user: "ryan") == "ryan ALL=(root) NOPASSWD: /usr/bin/pmset -a disablesleep 0, "
-        + "/usr/bin/pmset -a disablesleep 1, /usr/bin/pmset sleepnow")
+    #expect(sudoersRule(user: "ryan")
+        == "ryan ALL=(root) NOPASSWD: /usr/bin/pmset -a disablesleep 0, /usr/bin/pmset -a disablesleep 1")
     for bad in ["", "a b", "x;rm", "it's", "%admin"] {
         #expect(sudoersRule(user: bad) == nil, "\(bad)")
     }
@@ -105,7 +105,7 @@ let cafe = NetworkID(mac: "00:11:22:33:44:55")!
 
 @Test func installScriptText() {
     #expect(installScript(user: "ryan") == #"""
-        do shell script "t=$(/usr/bin/mktemp) && /usr/bin/printf '%s\\n' 'ryan ALL=(root) NOPASSWD: /usr/bin/pmset -a disablesleep 0, /usr/bin/pmset -a disablesleep 1, /usr/bin/pmset sleepnow' > \"$t\" && /usr/sbin/visudo -cf \"$t\" && /usr/bin/install -S -m 0440 -o root -g wheel \"$t\" /etc/sudoers.d/homeawake; s=$?; /bin/rm -f \"$t\"; exit $s" with administrator privileges
+        do shell script "t=$(/usr/bin/mktemp) && /usr/bin/printf '%s\\n' 'ryan ALL=(root) NOPASSWD: /usr/bin/pmset -a disablesleep 0, /usr/bin/pmset -a disablesleep 1' > \"$t\" && /usr/sbin/visudo -cf \"$t\" && /usr/bin/install -S -m 0440 -o root -g wheel \"$t\" /etc/sudoers.d/homeawake; s=$?; /bin/rm -f \"$t\"; exit $s" with administrator privileges
         """#)
     #expect(installScript(user: "a b") == nil)
 }
@@ -136,13 +136,13 @@ let cafe = NetworkID(mac: "00:11:22:33:44:55")!
 }
 
 @Test func statusLineText() {
-    #expect(statusLine(.stayAwake, lidModeInstalled: true) == "Awake at home, even with the lid closed.")
-    #expect(statusLine(.stayAwake, lidModeInstalled: false)
+    #expect(statusLine(.stayAwake, lidModeAvailable: true) == "Awake at home, even with the lid closed.")
+    #expect(statusLine(.stayAwake, lidModeAvailable: false)
         == "Awake at home while the lid is open. Closing the lid still sleeps.")
-    #expect(statusLine(.allowSleep(.notHome), lidModeInstalled: true) == "Not on a home network. This Mac sleeps normally.")
+    #expect(statusLine(.allowSleep(.notHome), lidModeAvailable: true) == "Not on a home network. This Mac sleeps normally.")
     let decisions: [Decision] = [.stayAwake, .allowSleep(.paused), .allowSleep(.onBattery), .allowSleep(.offline),
                                  .allowSleep(.notHome)]
-    #expect(Set(decisions.map { statusLine($0, lidModeInstalled: false) }).count == decisions.count)
+    #expect(Set(decisions.map { statusLine($0, lidModeAvailable: false) }).count == decisions.count)
 }
 
 @Test func runReportsExitStatusAndOutput() {
@@ -161,24 +161,43 @@ let sudoListHeader = """
         (ALL) ALL
 
     """
-let otherToolEntry = """
-        (root) NOPASSWD: /usr/bin/pmset -a disablesleep 0, /usr/bin/pmset -a
-            disablesleep 1
 
-    """
-
-@Test func lidModeRuleDetection() {
-    let ours = """
-            (root) NOPASSWD: /usr/bin/pmset -a disablesleep 0, /usr/bin/pmset -a
-                disablesleep 1, /usr/bin/pmset sleepnow
+@Test func lidModeFromAnotherToolsSeparateLines() {
+    let insomnia = """
+            (root) NOPASSWD: /usr/bin/pmset -a disablesleep 1
+            (root) NOPASSWD: /usr/bin/pmset -a disablesleep 0
+            (root) NOPASSWD: /usr/bin/pmset -b lowpowermode 1
+            (root) NOPASSWD: /usr/bin/pmset -b lowpowermode 0
 
         """
-    #expect(listsLidModeRule(sudoListHeader + otherToolEntry + ours))
-    #expect(listsLidModeRule(sudoListHeader + ours))
-    #expect(!listsLidModeRule(sudoListHeader + otherToolEntry))
-    #expect(!listsLidModeRule(sudoListHeader + ours.replacingOccurrences(of: "(root)", with: "(ALL)")))
-    #expect(!listsLidModeRule(sudoListHeader + ours.replacingOccurrences(of: ", /usr/bin/pmset sleepnow", with: "")))
-    #expect(!listsLidModeRule(""))
+    #expect(grantsLidMode(sudoList: sudoListHeader + insomnia))
+}
+
+@Test func lidModeFromOneCommaJoinedRule() {
+    let unwrapped = "    (root) NOPASSWD: /usr/bin/pmset -a disablesleep 0, /usr/bin/pmset -a disablesleep 1\n"
+    #expect(grantsLidMode(sudoList: sudoListHeader + unwrapped))
+    let wrapped = """
+            (root) NOPASSWD: /usr/bin/pmset -a disablesleep 0, /usr/bin/pmset -a
+                disablesleep 1
+
+        """
+    #expect(grantsLidMode(sudoList: sudoListHeader + wrapped))
+}
+
+@Test func noLidModeWithoutBothPasswordlessCommands() {
+    #expect(!grantsLidMode(sudoList: sudoListHeader + "    (root) NOPASSWD: /usr/bin/pmset -a disablesleep 1\n"))
+    #expect(!grantsLidMode(sudoList: sudoListHeader + """
+            (root) NOPASSWD: /usr/bin/pmset -a disablesleep 1
+            (root) /usr/bin/pmset -a disablesleep 0
+
+        """))
+    #expect(!grantsLidMode(sudoList: sudoListHeader + """
+            (root) NOPASSWD: /usr/bin/pmset -a disablesleep 0, /usr/bin/pmset -a
+        disablesleep 1
+
+        """))
+    #expect(!grantsLidMode(sudoList: sudoListHeader))
+    #expect(!grantsLidMode(sudoList: ""))
 }
 
 func plan(stayAwake: Bool, on: Bool, owned: Bool, canWrite: Bool = true, lidClosed: Bool = false,

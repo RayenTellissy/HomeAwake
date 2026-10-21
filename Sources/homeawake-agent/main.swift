@@ -47,7 +47,7 @@ func apply(stayAwake: Bool, lidClosed: Bool, terminating: Bool = false) {
         assertion = nil
     }
     let plan = planSleepSwitch(stayAwake: stayAwake, sleepDisabled: rootDomainFlag("SleepDisabled"),
-                               owned: ownsSleepSwitch, canWrite: lidModeInstalled(), lidClosed: lidClosed,
+                               owned: ownsSleepSwitch, canWrite: lidModeAvailable(), lidClosed: lidClosed,
                                terminating: terminating)
     if let value = plan.write, !sudo(value ? Pmset.preventSleep : Pmset.allowSleep) { return }
     ownsSleepSwitch = plan.owned

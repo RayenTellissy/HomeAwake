@@ -50,6 +50,7 @@ expect "SIGTERM exits 0" "$status" 0
 expect "and the assertion is gone" "$(pmset -g assertions | grep -c "pid $pid(" || true)" 0
 
 if [ "$before" = 0 ]; then
+    expect "staying awake with the switch off checks the sudo rule" "$(tried_sudo)" yes
     expect "staying awake without a usable rule takes no ownership" "$(owns)" 0
 
     claim

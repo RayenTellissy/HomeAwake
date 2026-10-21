@@ -66,13 +66,13 @@ do { try installAgent() } catch { problem = error.localizedDescription }
 while true {
     let prefs = load(Prefs.self, from: Files.prefs) ?? Prefs()
     let snapshot = load(AgentStatus.self, from: Files.status)?.snapshot
-    let lidMode = lidModeInstalled()
+    let lidMode = lidModeAvailable()
 
     let alert = NSAlert()
     alert.messageText = switch (agentService().running, snapshot) {
     case (false, _): "The HomeAwake agent is not running."
     case (true, nil): "HomeAwake is starting."
-    case let (true, snapshot?): statusLine(decide(snapshot, prefs), lidModeInstalled: lidMode)
+    case let (true, snapshot?): statusLine(decide(snapshot, prefs), lidModeAvailable: lidMode)
     }
     alert.informativeText = problem ?? ""
     problem = nil

@@ -27,10 +27,9 @@ public func save(_ value: some Encodable, to url: URL) throws {
     try data.write(to: url, options: .atomic)
 }
 
-/// Whether lid-closed mode is set up. Checking for the file first spares a sudo spawn on Macs without the rule.
-public func lidModeInstalled() -> Bool {
-    FileManager.default.fileExists(atPath: sudoersPath)
-        && listsLidModeRule(run(["/usr/bin/sudo", "-n", "-l"]).output)
+/// Whether lid-closed mode is available. It costs one sudo spawn.
+public func lidModeAvailable() -> Bool {
+    grantsLidMode(sudoList: run(["/usr/bin/sudo", "-n", "-l"]).output)
 }
 
 /// Runs a program to completion. `ok` means it exited with status 0.
