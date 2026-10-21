@@ -10,12 +10,18 @@ let canSystemSleep: UInt32 = 0xE000_0270
 let systemWillSleep: UInt32 = 0xE000_0280
 let systemHasPoweredOn: UInt32 = 0xE000_0300
 
-let ipv4Key = SCDynamicStoreKeyCreateNetworkGlobalEntity(nil, kSCDynamicStoreDomainState, kSCEntNetIPv4)
 let store = SCDynamicStoreCreate(nil, "homeawake-agent" as CFString, { _, _, _ in reconcile() }, nil)!
+let arpRetry = DispatchSource.makeTimerSource(queue: .main)
 var assertion: IOPMAssertionID?
-var arpRetry: DispatchWorkItem?
 var ownsSleepSwitch = load(AgentStatus.self, from: Files.status)?.ownsSleepSwitch ?? false
 var observed: Snapshot?
+/// A denied `sudo -n -l` holds until the next reconcile request, so the events in between spawn no sudo.
+var sudoDenied = false
+
+func sudoAllowsLidMode() -> Bool {
+    if !sudoDenied { sudoDenied = !sudoGrantsLidMode() }
+    return !sudoDenied
+}
 
 /// True when it just turned off the switch HomeAwake owned.
 @discardableResult
@@ -33,7 +39,7 @@ func apply(stayAwake: Bool) -> Bool {
         IOPMAssertionRelease(id)
         assertion = nil
     }
-    let update = updateSleepSwitch(stayAwake: stayAwake, owned: ownsSleepSwitch)
+    let update = updateSleepSwitch(stayAwake: stayAwake, owned: ownsSleepSwitch, canWrite: sudoAllowsLidMode())
     ownsSleepSwitch = update.owned
     return update.released
 }
@@ -53,13 +59,13 @@ func saveStatus() {
 }
 
 func reconcile(arpAttempt: Int = 0) {
-    arpRetry?.cancel()
-    let router = (SCDynamicStoreCopyValue(store, ipv4Key) as? [String: Any])?[kSCPropNetIPv4Router as String] as? String
-    let network = router.flatMap { NetworkID(arpOutput: run(["/usr/sbin/arp", "-n", $0]).output) }
+    let prefs = load(Prefs.self, from: Files.prefs) ?? Prefs()
     let providing = IOPSGetProvidingPowerSourceType(IOPSCopyPowerSourcesInfo().takeRetainedValue())
     let power: PowerSource = providing?.takeUnretainedValue() as String? == kIOPMACPowerKey ? .ac : .battery
-    let snapshot = Snapshot(power: power, network: network)
-    let prefs = load(Prefs.self, from: Files.prefs) ?? Prefs()
+    // Only a decision that would hold without a network can change once the network is known. Paused and on battery
+    // decide without it, so they spawn no arp.
+    let router = decide(Snapshot(power: power, network: nil), prefs) == .hold ? lookUpRouter(store) : nil
+    let snapshot = Snapshot(power: power, network: router?.network)
     observed = snapshot
     switch decide(snapshot, prefs) {
     case .hold: break
@@ -70,20 +76,25 @@ func reconcile(arpAttempt: Int = 0) {
         if released, reason == .onBattery, rootDomainFlag(kAppleClamshellStateKey) { sleepNow() }
     }
     saveStatus()
-    if router != nil, network == nil, arpAttempt < 4 {
-        let retry = DispatchWorkItem { reconcile(arpAttempt: arpAttempt + 1) }
-        arpRetry = retry
-        DispatchQueue.main.asyncAfter(deadline: .now() + .seconds(2 << arpAttempt), execute: retry)
+    if let router, router.network == nil, arpAttempt < 4 {
+        arpRetry.setEventHandler { reconcile(arpAttempt: arpAttempt + 1) }
+        arpRetry.schedule(deadline: .now() + .seconds(2 << arpAttempt))
+    } else {
+        arpRetry.schedule(deadline: .distantFuture)
     }
 }
 
-SCDynamicStoreSetNotificationKeys(store, [ipv4Key] as CFArray, nil)
+arpRetry.activate()
+SCDynamicStoreSetNotificationKeys(store, [routerKey()] as CFArray, nil)
 SCDynamicStoreSetDispatchQueue(store, .main)
 
 var token = Int32(0)
 // IOPSNotificationCreateRunLoopSource would also fire on every battery percentage change.
 notify_register_dispatch(kIOPSNotifyPowerSource, &token, .main) { _ in reconcile() }
-notify_register_dispatch(reconcileRequested, &token, .main) { _ in reconcile() }
+notify_register_dispatch(reconcileRequested, &token, .main) { _ in
+    sudoDenied = false
+    reconcile()
+}
 
 var rootPort = io_connect_t(0)
 var powerPort: IONotificationPortRef?

@@ -1,5 +1,6 @@
 import Foundation
 import IOKit
+import SystemConfiguration
 
 public let reconcileRequested = "dev.homeawake.reconcile"
 
@@ -41,9 +42,10 @@ public func sudoGrantsLidMode() -> Bool {
 
 /// Plans against the switch as it is now and runs the write with `sudo -n`. Returns the new ownership, and whether this
 /// call just turned off the switch HomeAwake owned.
-public func updateSleepSwitch(stayAwake: Bool, owned: Bool) -> (owned: Bool, released: Bool) {
+public func updateSleepSwitch(stayAwake: Bool, owned: Bool, canWrite: @autoclosure () -> Bool = sudoGrantsLidMode())
+    -> (owned: Bool, released: Bool) {
     let plan = planSleepSwitch(stayAwake: stayAwake, sleepDisabled: rootDomainFlag("SleepDisabled"), owned: owned,
-                               canWrite: sudoGrantsLidMode())
+                               canWrite: canWrite())
     guard let value = plan.write else { return (plan.owned, false) }
     let command = ["/usr/bin/sudo", "-n"] + Pmset.disablesleep(value)
     guard run(command).ok else {
@@ -51,6 +53,17 @@ public func updateSleepSwitch(stayAwake: Bool, owned: Bool) -> (owned: Bool, rel
         return (owned, false)
     }
     return (plan.owned, !value)
+}
+
+public func routerKey() -> CFString {
+    SCDynamicStoreKeyCreateNetworkGlobalEntity(nil, kSCDynamicStoreDomainState, kSCEntNetIPv4)
+}
+
+/// The default route's router, with its network once ARP has resolved it. Nil without a default route.
+public func lookUpRouter(_ store: SCDynamicStore? = nil) -> (ip: String, network: NetworkID?)? {
+    let value = SCDynamicStoreCopyValue(store, routerKey()) as? [String: Any]
+    guard let ip = value?[kSCPropNetIPv4Router as String] as? String else { return nil }
+    return (ip, NetworkID(arpOutput: run(["/usr/sbin/arp", "-n", ip]).output))
 }
 
 /// Runs a program to completion. `ok` means it exited with status 0.

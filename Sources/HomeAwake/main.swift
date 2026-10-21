@@ -58,19 +58,25 @@ NSApp.activate()
 
 var problem: String?
 do { try ensureAgentInstalled() } catch { problem = error.localizedDescription }
+// The agent remembers a denied sudo rule until a reconcile request, so this picks up a rule another tool installed.
+notify_post(reconcileRequested)
 
 while true {
     let prefs = load(Prefs.self, from: Files.prefs) ?? Prefs()
     let snapshot = load(AgentStatus.self, from: Files.status)?.snapshot
+    let network = lookUpRouter()?.network
     let lidMode = sudoGrantsLidMode()
 
     let alert = NSAlert()
     alert.messageText = switch (agentService().running, snapshot) {
     case (false, _): "The HomeAwake agent is not running."
     case (true, nil): "HomeAwake is starting."
-    case let (true, snapshot?): statusLine(decide(snapshot, prefs), sleepDisabled: rootDomainFlag("SleepDisabled"))
+    case let (true, snapshot?):
+        // The agent skips the lookup while paused or on battery, so its snapshot can lack the network found here.
+        statusLine(decide(Snapshot(power: snapshot.power, network: network), prefs),
+                   sleepDisabled: rootDomainFlag("SleepDisabled"))
     }
-    alert.informativeText = [problem, infoLine(network: snapshot?.network, lidModeAvailable: lidMode)]
+    alert.informativeText = [problem, infoLine(network: network, lidModeAvailable: lidMode)]
         .compactMap { $0 }.joined(separator: "\n\n")
     problem = nil
 
@@ -80,7 +86,7 @@ while true {
         actions.append(action)
     }
     offer("Done") { exit(0) }
-    if let network = snapshot?.network {
+    if let network {
         if prefs.homes.contains(network) {
             offer("Forget this home network") { try updatePrefs { $0.homes.remove(network) } }
         } else {

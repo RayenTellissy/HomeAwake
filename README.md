@@ -39,7 +39,9 @@ Lid-closed mode needs a sudoers rule that lets your user run these two commands 
 ```
 
 HomeAwake reads `sudo -n -l` to find out whether any rule grants both. If another tool already installed such a rule,
-lid-closed mode is available right away, and there is nothing to set up. Otherwise, click **Set up lid-closed mode…**
+lid-closed mode is available right away, and there is nothing to set up. When sudo says no, the agent does not ask
+again until you open HomeAwake or change a setting, so a rule another tool installs later takes effect the next time
+you open the app. Otherwise, click **Set up lid-closed mode…**
 and enter your password once. HomeAwake installs `/etc/sudoers.d/homeawake` with exactly those two commands. `visudo`
 checks the rule before it goes live.
 
@@ -69,7 +71,7 @@ HomeAwake has two programs in one app bundle.
 
 The agent has no timer. It wakes only when the power source switches between AC and battery, when the network
 changes, when the Mac wakes from sleep, or when you change a setting. Right after a network change, it can retry the
-router lookup up to four times over 30 seconds.
+router lookup up to four times over 30 seconds. While paused or on battery, it does not look up the router at all.
 
 Measured on a MacBook Pro with Apple M5 and macOS 26.6:
 
@@ -126,5 +128,6 @@ scripts/measure-agent.sh   # five 70 s runs: footprint, idle wakeups, and CPU, w
 Both scripts source `scripts/scratch-agent.sh`, which runs the agent through `scripts/sandboxed.sh` with a scratch
 `CFFIXED_USER_HOME`. The sandbox blocks the agent from running `sudo` or `pmset`, so a test run cannot change
 `disablesleep` even on a Mac where a sudoers rule allows it. The agent logs each blocked spawn to stderr, and
-`check-agent.sh` reads those lines. `check-agent.sh` also builds `scripts/no-router.c` with `clang` and loads it into
-one agent run to take the router away while the agent holds its assertion.
+`check-agent.sh` reads those lines. `check-agent.sh` also builds `scripts/check-hooks.c` with `clang` and loads it
+into one agent run. The hooks let the script take the router away or replace it with one that has no ARP entry, count
+arp and sudo spawns, and post a power event.

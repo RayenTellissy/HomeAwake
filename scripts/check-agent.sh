@@ -10,6 +10,8 @@ sleep_disabled() { pmset -g | awk '/SleepDisabled/ {print $2}'; }
 real_status() { stat -f %m "$HOME/Library/Application Support/HomeAwake/status.json" 2>/dev/null || echo absent; }
 claim() { printf '{"ownsSleepSwitch": true, "snapshot": {"power": "ac"}}' > "$support/status.json"; }
 tried_sudo() { grep -q 'posix_spawn /usr/bin/sudo failed' "$home/stderr.$started" && echo yes || echo no; }
+spawns() { grep -c "^spawn $1\$" "$home/stderr.$started" || true; }
+power_event() { notifyutil -p dev.homeawake.check.power; sleep 0.5; }
 
 router=$(scutil <<< 'show State:/Network/Global/IPv4' | awk '/Router/ {print $3}')
 IFS=: read -ra octets <<< "$(arp -n "$router" | awk '{print $4}')"
@@ -59,19 +61,42 @@ else
     echo "skip: ownership rows need SleepDisabled 0, and it is $before"
 fi
 
-clang -dynamiclib -framework SystemConfiguration -o "$home/no-router.dylib" scripts/no-router.c
+clang -dynamiclib -framework CoreFoundation -framework SystemConfiguration -o "$home/hooks.dylib" scripts/check-hooks.c
 printf '%s' "$at_home" > "$support/prefs.json"
-start /usr/bin/env DYLD_INSERT_LIBRARIES="$home/no-router.dylib"
-expect "at home with the router lookup interposed, the agent holds one assertion" "$(assertions)" 1
-touch "$home/no-router"; reconcile
+start /usr/bin/env DYLD_INSERT_LIBRARIES="$home/hooks.dylib"
+expect "at home with the check hooks loaded, the agent holds one assertion" "$(assertions)" 1
+
+if [ "$before" = 0 ]; then
+    expect "staying awake with the switch off asked sudo once" "$(spawns /usr/bin/sudo)" 1
+    power_event
+    expect "a power event after sudo denied the rule asks sudo nothing" "$(spawns /usr/bin/sudo)" 1
+    reconcile
+    expect "a reconcile request asks sudo again" "$(spawns /usr/bin/sudo)" 2
+fi
+
+echo 192.0.2.1 > "$home/router"; reconcile
+expect "with a router that has no ARP entry, status.json has no network" "$(status_field snapshot.network)" absent
+expect "and the agent keeps its assertion" "$(assertions)" 1
+arp_before=$(spawns /usr/sbin/arp)
+sleep 2
+expect "and retries the lookup 2 s later" "$(spawns /usr/sbin/arp)" $((arp_before + 1))
+rm "$home/router"; reconcile
+expect "the router resolving keeps exactly one" "$(assertions)" 1
+sleep 4.5
+expect "and cancels the pending retry" "$(spawns /usr/sbin/arp)" $((arp_before + 2))
+
+: > "$home/router"; reconcile
 expect "with no router, status.json has no network" "$(status_field snapshot.network)" absent
 expect "and the agent keeps its assertion" "$(assertions)" 1
 prefs "$paused"
 expect "pausing with no router still releases it" "$(assertions)" 0
 prefs "$at_home"
 expect "resuming with no router does not take it" "$(assertions)" 0
-rm "$home/no-router"; reconcile
+rm "$home/router"; reconcile
 expect "the router coming back takes it again" "$(assertions)" 1
+arp_before=$(spawns /usr/sbin/arp)
+prefs "$paused"
+expect "paused, a reconcile runs no arp" "$(spawns /usr/sbin/arp)" "$arp_before"
 stop
 
 expect "the real home's status.json is untouched" "$(real_status)" "$real_before"
