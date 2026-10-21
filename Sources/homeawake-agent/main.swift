@@ -53,7 +53,9 @@ func reconcile(arpAttempt: Int = 0) {
     arpRetry?.cancel()
     let router = (SCDynamicStoreCopyValue(store, ipv4Key) as? [String: Any])?["Router"] as? String
     let network = router.flatMap { NetworkID(arpOutput: run(["/usr/sbin/arp", "-n", $0]).output) }
-    let power: PowerSource = IOPSGetTimeRemainingEstimate() == kIOPSTimeRemainingUnlimited ? .ac : .battery
+    // The time-remaining estimate can still read battery when the kIOPSNotifyPowerSource post arrives.
+    let providing = IOPSGetProvidingPowerSourceType(IOPSCopyPowerSourcesInfo().takeRetainedValue())
+    let power: PowerSource = providing?.takeUnretainedValue() as String? == kIOPMACPowerKey ? .ac : .battery
     let snapshot = Snapshot(power: power, network: network, lidClosed: rootDomainFlag("AppleClamshellState"))
     let prefs = load(Prefs.self, from: Files.prefs) ?? Prefs()
     apply(stayAwake: decide(snapshot, prefs) == .stayAwake, lidClosed: snapshot.lidClosed)
