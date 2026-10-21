@@ -75,10 +75,10 @@ router lookup up to four times over 30 seconds. While paused or on battery, it d
 
 Measured on a MacBook Pro with Apple M5 and macOS 26.6:
 
-- Memory (`phys_footprint` 10 seconds after launch) ranged from 2048 to 2656 KB over two sets of five runs, with
-  medians of 2048 KB and 2608 KB. A bare run loop with the same event
-  sources and no work measures about 1.8 MB, so HomeAwake's own code adds 0.25 to 0.8 MB. RSS was about 8 MB, most of
-  it system libraries that other processes share.
+- Memory (`phys_footprint` 10 seconds after launch) ranged from 2048 to 2848 KB over four sets of five runs taken at
+  different times of day, with medians from 2048 to 2672 KB. A bare run loop with the same event sources and no work
+  measured 1.8 MB in the same sessions, so HomeAwake's own code adds 0.25 to 0.9 MB. RSS was about 8 MB, most of it
+  system libraries that other processes share.
 - Idle wakeups over 60 seconds were 0 in every run.
 - CPU time over 70 seconds was `00:00.01` in `top` in every run, which is its smallest step of 10 ms.
 
