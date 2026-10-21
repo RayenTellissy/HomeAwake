@@ -53,7 +53,11 @@ func sleepNow() {
 
 func saveStatus() {
     guard let observed else { return }
-    do { try save(AgentStatus(snapshot: observed, ownsSleepSwitch: ownsSleepSwitch), to: Files.status) } catch {
+    do {
+        if try save(AgentStatus(snapshot: observed, ownsSleepSwitch: ownsSleepSwitch), to: Files.status) {
+            notify_post(statusChanged)
+        }
+    } catch {
         NSLog("Could not write status: %@", "\(error)")
     }
 }

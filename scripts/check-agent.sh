@@ -12,6 +12,13 @@ claim() { printf '{"ownsSleepSwitch": true, "snapshot": {"power": "ac"}}' > "$su
 tried_sudo() { grep -q 'posix_spawn /usr/bin/sudo failed' "$home/stderr.$started" && echo yes || echo no; }
 spawns() { grep -c "^spawn $1\$" "$home/stderr.$started" || true; }
 power_event() { notifyutil -p dev.homeawake.check.power; sleep 0.5; }
+posts_status() {
+    notifyutil -1 dev.homeawake.status > /dev/null & local watcher=$!
+    sleep 0.2
+    "$@"
+    if kill $watcher 2>/dev/null; then echo no; else echo yes; fi
+    wait $watcher 2>/dev/null || true
+}
 
 router=$(scutil <<< 'show State:/Network/Global/IPv4' | awk '/Router/ {print $3}')
 IFS=: read -ra octets <<< "$(arp -n "$router" | awk '{print $4}')"
@@ -26,8 +33,9 @@ start
 expect "status.json names this network" "$(status_field snapshot.network)" "$mac"
 expect "home network on AC holds one assertion" "$(assertions)" 1
 
-prefs "$paused"
+expect "a reconcile that changes status.json posts dev.homeawake.status" "$(posts_status prefs "$paused")" yes
 expect "pause releases it" "$(assertions)" 0
+expect "a reconcile that leaves status.json as it was posts nothing" "$(posts_status reconcile)" no
 
 prefs "$at_home"
 expect "resume takes it again" "$(assertions)" 1
