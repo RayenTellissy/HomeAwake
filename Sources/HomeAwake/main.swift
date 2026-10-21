@@ -11,8 +11,6 @@ func agentService() -> (loaded: Bool, running: Bool) {
     return (print.ok, print.output.contains("state = running"))
 }
 
-/// Writes the LaunchAgent when it is missing or stale and loads it when needed, so opening the app twice still
-/// leaves exactly one agent.
 func installAgent() throws {
     let agent = Bundle.main.executableURL!.deletingLastPathComponent().appending(path: "homeawake-agent")
     let plist = launchAgentPlist(agentPath: agent.path)
@@ -25,7 +23,6 @@ func installAgent() throws {
     guard run(["/bin/launchctl", "bootstrap", "gui/\(getuid())", Files.launchAgent.path]).ok else {
         throw Failure(errorDescription: "launchctl could not load the HomeAwake agent.")
     }
-    // The agent writes its first status right after it starts.
     for _ in 0..<20 where !FileManager.default.fileExists(atPath: Files.status.path) { usleep(100_000) }
 }
 
@@ -52,7 +49,6 @@ func setUpLidMode() throws {
 func remove() {
     run(["/bin/launchctl", "bootout", service])
     try? FileManager.default.removeItem(at: Files.launchAgent)
-    // A running agent gives the switch back on SIGTERM. This covers one that was not running.
     if var status = load(AgentStatus.self, from: Files.status), status.ownsSleepSwitch,
        run(["/usr/bin/sudo", "-n"] + Pmset.allowSleep).ok {
         status.ownsSleepSwitch = false

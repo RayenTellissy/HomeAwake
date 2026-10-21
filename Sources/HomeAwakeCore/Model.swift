@@ -1,7 +1,7 @@
 public enum PowerSource: String, Codable, Sendable { case ac, battery }
 
 /// A network, identified by its default gateway's MAC address. Every value is normalized: lowercase, two hex digits
-/// per octet. It encodes as a bare string so prefs.json stays readable.
+/// per octet. It encodes as a bare string.
 public struct NetworkID: Hashable, Codable, Sendable {
     public let gatewayMAC: String
 
@@ -41,7 +41,6 @@ public struct NetworkID: Hashable, Codable, Sendable {
     }
 }
 
-/// What the agent last observed.
 public struct Snapshot: Equatable, Codable, Sendable {
     public var power: PowerSource
     public var network: NetworkID?
@@ -54,8 +53,6 @@ public struct Snapshot: Equatable, Codable, Sendable {
     }
 }
 
-/// The content of status.json. The agent reads `ownsSleepSwitch` back at launch, so a crash or restart still knows
-/// whose switch it is.
 public struct AgentStatus: Equatable, Codable, Sendable {
     public var snapshot: Snapshot
     public var ownsSleepSwitch: Bool
@@ -97,7 +94,6 @@ public func statusLine(_ decision: Decision, lidModeAvailable: Bool) -> String {
     }
 }
 
-/// Names the router that "Use this network as home" saves, and whether lid-closed mode is available.
 public func infoLine(network: NetworkID?, lidModeAvailable: Bool) -> String {
     let router = network.map { "This network's router is \($0.gatewayMAC)." } ?? "No router found on this network."
     return router + (lidModeAvailable ? " Lid-closed mode is available." : " Lid-closed mode is not set up.")
@@ -120,7 +116,6 @@ public struct SleepSwitchPlan: Equatable, Sendable {
     }
 }
 
-/// `canWrite` costs a sudo spawn, so it is evaluated only when the plan would write.
 public func planSleepSwitch(stayAwake: Bool, sleepDisabled: Bool, owned: Bool, canWrite: @autoclosure () -> Bool,
                             lidClosed: Bool, terminating: Bool) -> SleepSwitchPlan {
     let leave = SleepSwitchPlan(write: nil, owned: owned)

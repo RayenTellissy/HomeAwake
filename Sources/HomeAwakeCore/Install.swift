@@ -3,8 +3,7 @@ import Foundation
 public let agentLabel = "dev.homeawake.agent"
 public let sudoersPath = "/etc/sudoers.d/homeawake"
 
-/// The exact argument vectors the sudoers rule allows. Both executables run these constants, so the rule and the
-/// calls cannot drift apart.
+/// The exact argument vectors the sudoers rule allows.
 public enum Pmset {
     public static let allowSleep = ["/usr/bin/pmset", "-a", "disablesleep", "0"]
     public static let preventSleep = ["/usr/bin/pmset", "-a", "disablesleep", "1"]
@@ -13,7 +12,7 @@ public enum Pmset {
     static let ruleCommands = [allowSleep, preventSleep].map { $0.joined(separator: " ") }
 }
 
-/// Nil for a user name that sudoers or the shell would need escaped. macOS short names never do.
+/// Nil for a user name that sudoers or the shell would need escaped.
 public func sudoersRule(user: String) -> String? {
     let allowed = Set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-")
     guard !user.isEmpty, user.allSatisfy(allowed.contains) else { return nil }
@@ -26,8 +25,7 @@ public func grantsLidMode(sudoList: String) -> Bool {
     Set(Pmset.ruleCommands).isSubset(of: passwordlessRootCommands(sudoList))
 }
 
-/// sudo prints one entry per line for separate sudoers lines, but joins one rule's commands with ", " into one entry,
-/// and on a terminal it wraps long entries onto deeper-indented lines.
+/// sudo prints one entry per line for separate sudoers lines, but joins one rule's commands with ", " into one entry.
 func passwordlessRootCommands(_ sudoList: String) -> Set<String> {
     var entries: [String] = []
     for line in sudoList.split(separator: "\n") {
@@ -45,8 +43,7 @@ func passwordlessRootCommands(_ sudoList: String) -> Set<String> {
     })
 }
 
-/// AppleScript source that installs the rule behind one admin prompt. visudo checks the file before it goes live, and
-/// `install -S` renames it into place so sudo never reads a half-written rule.
+/// AppleScript source that installs the rule behind one admin prompt.
 public func installScript(user: String) -> String? {
     guard let rule = sudoersRule(user: user) else { return nil }
     let shell = [
@@ -66,6 +63,5 @@ public func launchAgentPlist(agentPath: String) -> Data {
         "KeepAlive": true,
         "ProcessType": "Background",
     ]
-    // Strings, booleans, and an array of strings always serialize.
     return try! PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0)
 }

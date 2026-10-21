@@ -30,8 +30,6 @@ func sudo(_ command: [String]) -> Bool {
     return ok
 }
 
-/// Converges the system on one decision. It compares against the real state every time, so repeating it changes
-/// nothing.
 func apply(stayAwake: Bool, lidClosed: Bool, terminating: Bool = false) {
     if stayAwake, assertion == nil {
         var id = IOPMAssertionID(0)
@@ -72,7 +70,6 @@ func reconcile(arpAttempt: Int = 0) {
     arpRetry?.cancel()
     let router = (SCDynamicStoreCopyValue(store, ipv4Key) as? [String: Any])?["Router"] as? String
     let network = router.flatMap { NetworkID(arpOutput: run(["/usr/sbin/arp", "-n", $0]).output) }
-    // The time-remaining estimate can still read battery when the kIOPSNotifyPowerSource post arrives.
     let providing = IOPSGetProvidingPowerSourceType(IOPSCopyPowerSourcesInfo().takeRetainedValue())
     let power: PowerSource = providing?.takeUnretainedValue() as String? == kIOPMACPowerKey ? .ac : .battery
     let snapshot = Snapshot(power: power, network: network, lidClosed: rootDomainFlag("AppleClamshellState"))
@@ -80,7 +77,6 @@ func reconcile(arpAttempt: Int = 0) {
     observed = snapshot
     apply(stayAwake: decide(snapshot, prefs) == .stayAwake, lidClosed: snapshot.lidClosed)
     saveStatus()
-    // A network that just came up often has a router before the router has an ARP entry.
     if router != nil, network == nil, arpAttempt < 4 {
         let retry = DispatchWorkItem { reconcile(arpAttempt: arpAttempt + 1) }
         arpRetry = retry
@@ -91,9 +87,8 @@ func reconcile(arpAttempt: Int = 0) {
 SCDynamicStoreSetNotificationKeys(store, [ipv4Key] as CFArray, nil)
 SCDynamicStoreSetDispatchQueue(store, .main)
 
-// kIOPSNotifyPowerSource fires only on AC/battery switches. IOPSNotificationCreateRunLoopSource also fires on every
-// battery percentage change.
 var token = Int32(0)
+// IOPSNotificationCreateRunLoopSource would also fire on every battery percentage change.
 notify_register_dispatch(kIOPSNotifyPowerSource, &token, .main) { _ in reconcile() }
 notify_register_dispatch(prefsChanged, &token, .main) { _ in reconcile() }
 
@@ -112,7 +107,6 @@ IONotificationPortSetDispatchQueue(powerPort, .main)
 signal(SIGTERM, SIG_IGN)
 let terminate = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
 terminate.setEventHandler {
-    // Logout and shutdown send SIGTERM too, and a forced sleep then would cut off a remote restart.
     apply(stayAwake: false, lidClosed: false, terminating: true)
     saveStatus()
     exit(0)

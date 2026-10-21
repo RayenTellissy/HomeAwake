@@ -1,7 +1,4 @@
 #!/bin/bash
-# Runs the sandboxed agent several times under a scratch HOME with no prefs, so it decides allowSleep and changes
-# nothing. Each run prints phys_footprint at 10 s and idle wakeups and CPU time over the next 60 s, then the script
-# prints the median and range. top's idlew is a running total, so a run's wakeups are its last sample minus its first.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 agent=${1:-build/HomeAwake.app/Contents/MacOS/homeawake-agent}

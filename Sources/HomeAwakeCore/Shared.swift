@@ -1,11 +1,8 @@
 import Foundation
 
-/// Darwin notification the control app posts after it changes prefs or installs the sudoers rule.
 public let prefsChanged = "dev.homeawake.prefs"
 
 public enum Files {
-    // Foundation's home lookups ignore $HOME. launchd and Finder both set it, and honoring it lets a test run of the
-    // agent keep its files out of the real Application Support folder.
     static let home = URL(fileURLWithPath: getenv("HOME").map { String(cString: $0) } ?? NSHomeDirectory())
     public static let prefs = home.appending(path: "Library/Application Support/HomeAwake/prefs.json")
     public static let status = home.appending(path: "Library/Application Support/HomeAwake/status.json")
@@ -27,7 +24,6 @@ public func save(_ value: some Encodable, to url: URL) throws {
     try data.write(to: url, options: .atomic)
 }
 
-/// Whether lid-closed mode is available. It costs one sudo spawn.
 public func lidModeAvailable() -> Bool {
     grantsLidMode(sudoList: run(["/usr/bin/sudo", "-n", "-l"]).output)
 }

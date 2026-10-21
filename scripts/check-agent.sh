@@ -1,7 +1,4 @@
 #!/bin/bash
-# Drives the agent's prefs, notification, assertion, and SleepDisabled ownership paths under a scratch HOME. It holds a
-# sleep assertion for a few seconds. The agent runs through scripts/sandboxed.sh, so it cannot change SleepDisabled,
-# and every sudo spawn it tries shows up as a sandbox denial in the system log.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 agent=${1:-build/HomeAwake.app/Contents/MacOS/homeawake-agent}
