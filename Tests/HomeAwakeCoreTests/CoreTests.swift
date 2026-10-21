@@ -145,6 +145,13 @@ let cafe = NetworkID(mac: "00:11:22:33:44:55")!
     #expect(Set(decisions.map { statusLine($0, lidModeAvailable: false) }).count == decisions.count)
 }
 
+@Test func infoLineText() {
+    #expect(infoLine(network: home, lidModeAvailable: true)
+        == "This network's router is c4:0f:5e:10:07:c0. Lid-closed mode is available.")
+    #expect(infoLine(network: nil, lidModeAvailable: false)
+        == "No router found on this network. Lid-closed mode is not set up.")
+}
+
 @Test func runReportsExitStatusAndOutput() {
     #expect(run(["/bin/echo", "c4:f:a6"]) == (true, "c4:f:a6\n"))
     #expect(run(["/bin/sh", "-c", "echo partial; echo noise >&2; exit 3"]) == (false, "partial\n"))

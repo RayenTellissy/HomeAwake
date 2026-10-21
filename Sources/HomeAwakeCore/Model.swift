@@ -97,6 +97,12 @@ public func statusLine(_ decision: Decision, lidModeAvailable: Bool) -> String {
     }
 }
 
+/// Names the router that "Use this network as home" saves, and whether lid-closed mode is available.
+public func infoLine(network: NetworkID?, lidModeAvailable: Bool) -> String {
+    let router = network.map { "This network's router is \($0.gatewayMAC)." } ?? "No router found on this network."
+    return router + (lidModeAvailable ? " Lid-closed mode is available." : " Lid-closed mode is not set up.")
+}
+
 /// What to do with the global `SleepDisabled` switch. Other tools write the same switch, so HomeAwake turns it off
 /// only when it was the one that turned it on.
 public struct SleepSwitchPlan: Equatable, Sendable {

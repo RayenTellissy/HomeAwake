@@ -14,7 +14,7 @@ func agentService() -> (loaded: Bool, running: Bool) {
 /// Writes the LaunchAgent when it is missing or stale and loads it when needed, so opening the app twice still
 /// leaves exactly one agent.
 func installAgent() throws {
-    let agent = Bundle.main.bundleURL.appending(path: "Contents/MacOS/homeawake-agent")
+    let agent = Bundle.main.executableURL!.deletingLastPathComponent().appending(path: "homeawake-agent")
     let plist = launchAgentPlist(agentPath: agent.path)
     let loaded = agentService().loaded
     guard (try? Data(contentsOf: Files.launchAgent)) != plist || !loaded else { return }
@@ -42,7 +42,10 @@ func setUpLidMode() throws {
     }
     var error: NSDictionary?
     NSAppleScript(source: source)?.executeAndReturnError(&error)
-    if let error { throw Failure(errorDescription: error[NSAppleScript.errorMessage] as? String ?? "Setup failed.") }
+    if let error {
+        guard error[NSAppleScript.errorNumber] as? Int != Int(userCanceledErr) else { return }
+        throw Failure(errorDescription: error[NSAppleScript.errorMessage] as? String ?? "Setup failed.")
+    }
     notify_post(prefsChanged)
 }
 
@@ -74,7 +77,8 @@ while true {
     case (true, nil): "HomeAwake is starting."
     case let (true, snapshot?): statusLine(decide(snapshot, prefs), lidModeAvailable: lidMode)
     }
-    alert.informativeText = problem ?? ""
+    alert.informativeText = [problem, infoLine(network: snapshot?.network, lidModeAvailable: lidMode)]
+        .compactMap { $0 }.joined(separator: "\n\n")
     problem = nil
 
     var actions: [() throws -> Void] = []
