@@ -29,7 +29,14 @@ func updatePrefs(_ change: (inout Prefs) -> Void) throws {
     var prefs = load(Prefs.self, from: Files.prefs) ?? Prefs()
     change(&prefs)
     try save(prefs, to: Files.prefs)
+    requestReconcile()
+}
+
+/// The agent applies a request after this returns, so wait briefly for its new status before redrawing the window.
+func requestReconcile() {
+    let before = try? Data(contentsOf: Files.status)
     notify_post(reconcileRequested)
+    for _ in 0..<10 where (try? Data(contentsOf: Files.status)) == before { usleep(100_000) }
 }
 
 func setUpLidMode() throws {
@@ -42,7 +49,7 @@ func setUpLidMode() throws {
         guard error[NSAppleScript.errorNumber] as? Int != Int(userCanceledErr) else { return }
         throw Failure(errorDescription: error[NSAppleScript.errorMessage] as? String ?? "Setup failed.")
     }
-    notify_post(reconcileRequested)
+    requestReconcile()
 }
 
 func remove() {
