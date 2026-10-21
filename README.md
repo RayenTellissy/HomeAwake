@@ -16,8 +16,9 @@ address without Location permission, unlike the network name.
 	```
 
 2. Copy `build/HomeAwake.app` to `/Applications`.
-3. Open HomeAwake. It installs its background agent and shows the current status.
-4. At home, click **Use this network as home**.
+3. Open HomeAwake. It installs its background agent and shows the current status. The line under the status names
+   this network's router and says whether lid-closed mode is available.
+4. At home, click **Use this network as home**. HomeAwake saves the router named in that line.
 5. Click **Done**. The window closes, and the agent keeps running.
 
 Open HomeAwake again whenever you want to see the status, pause, or change the home network. If you move the app,
@@ -29,18 +30,33 @@ Without this setup, HomeAwake keeps the Mac awake only while the lid is open. ma
 assertion block idle sleep, but only Apple-signed software can block lid-close sleep. The one switch left is
 `pmset disablesleep`, and it needs root.
 
-To set it up, click **Set up lid-closed mode…** and enter your password once. HomeAwake installs
-`/etc/sudoers.d/homeawake`, which lets your user run exactly these three commands without a password:
+Lid-closed mode needs a sudoers rule that lets your user run these two commands without a password:
 
 ```
 /usr/bin/pmset -a disablesleep 0
 /usr/bin/pmset -a disablesleep 1
-/usr/bin/pmset sleepnow
 ```
 
-`visudo` checks the rule before it is installed. After that, the agent turns `disablesleep` on at home and off
-everywhere else. If you unplug the Mac with the lid closed, the agent turns `disablesleep` off and puts the Mac to
-sleep right away.
+HomeAwake reads `sudo -n -l` to find out whether any rule grants both. If another tool already installed such a rule,
+lid-closed mode is available right away, and there is nothing to set up. Otherwise, click **Set up lid-closed mode…**
+and enter your password once. HomeAwake installs `/etc/sudoers.d/homeawake` with exactly those two commands. `visudo`
+checks the rule before it goes live.
+
+### HomeAwake turns off only what it turned on
+
+`disablesleep` is one switch for the whole Mac, and other tools can set it too. HomeAwake follows these rules:
+
+- At home on AC power, if `disablesleep` is off, the agent turns it on and records in `status.json` that HomeAwake
+  owns it.
+- If `disablesleep` is already on when HomeAwake needs it, HomeAwake leaves it alone and does not take ownership.
+  That switch belongs to the tool that set it.
+- Away from home, on battery, or when paused, the agent turns `disablesleep` off only if HomeAwake owns it. It never
+  turns off another tool's switch.
+- If you unplug the Mac with the lid closed while HomeAwake owns the switch, the agent turns `disablesleep` off and
+  asks macOS to sleep right away, so the Mac does not stay awake in a bag. It makes that request itself, without
+  sudo.
+
+The agent reads ownership back from `status.json` when it starts, so a crash or restart does not lose track of it.
 
 ## What runs, and what it costs
 
@@ -56,10 +72,10 @@ router lookup up to four times over 30 seconds.
 
 Measured on a MacBook Pro with Apple M5 and macOS 26.6, over five runs of `scripts/measure-agent.sh`:
 
-- Memory (`phys_footprint` 10 seconds after launch) was 2080 to 2128 KB, with a median of 2096 KB. RSS was about
-  7 MB, most of it system libraries that other processes share.
+- Memory (`phys_footprint` 10 seconds after launch) was 2528 to 2608 KB, with a median of 2608 KB. RSS was about
+  8 MB, most of it system libraries that other processes share.
 - Idle wakeups over 60 seconds were 0 in every run.
-- CPU time over 70 seconds was under 10 ms in every run. `top` shows `00:00.00`.
+- CPU time over 70 seconds was `00:00.01` in `top` in every run, which is its smallest step of 10 ms.
 
 The window app uses no memory once you click **Done**, because it quits.
 
@@ -70,6 +86,8 @@ agent, and HomeAwake pays it only at home on AC power.
 
 - It cannot wake a Mac that is already asleep. Wake-on-LAN to a MacBook on Wi-Fi is not dependable. If the Mac sleeps
   at home, for example because you closed the lid before lid-closed mode was set up, open the lid to wake it.
+- It does not turn off a `disablesleep` that another tool turned on. While that tool keeps it on, the Mac stays awake
+  everywhere, with the lid open or closed.
 - It recognizes home by the router. A full-tunnel VPN that replaces the default route can hide the router, and then
   HomeAwake treats the Mac as away.
 
@@ -77,14 +95,14 @@ agent, and HomeAwake pays it only at home on AC power.
 
 - `~/Library/Application Support/HomeAwake/prefs.json` holds your home networks and the pause switch. Only the app
   writes it.
-- `~/Library/Application Support/HomeAwake/status.json` holds what the agent last saw. The agent rewrites it only
-  when that changes.
+- `~/Library/Application Support/HomeAwake/status.json` holds what the agent last saw and whether HomeAwake owns
+  `disablesleep`. Only the agent writes it, and only when that changes.
 
 ## Remove HomeAwake
 
 Open HomeAwake and click **Remove HomeAwake**. It stops the agent, deletes the LaunchAgent, and turns
-`disablesleep` off. Your settings stay in `~/Library/Application Support/HomeAwake`. The lid-closed rule stays too.
-To delete it, run:
+`disablesleep` off if HomeAwake owns it. Your settings stay in `~/Library/Application Support/HomeAwake`. The
+lid-closed rule stays too. If HomeAwake installed it, you can delete it with this command:
 
 ```sh
 sudo rm /etc/sudoers.d/homeawake
@@ -97,5 +115,8 @@ swift build -c release
 swift test
 scripts/build-app.sh
 scripts/check-agent.sh     # holds a sleep assertion for a few seconds under a scratch HOME
-scripts/measure-agent.sh   # 70 s run: footprint, idle wakeups, and CPU
+scripts/measure-agent.sh   # five 70 s runs: footprint, idle wakeups, and CPU, with the median and range
 ```
+
+Both scripts run the agent through `scripts/sandboxed.sh`, which blocks it from running `sudo` or `pmset`, so a test
+run cannot change `disablesleep` even on a Mac where a sudoers rule allows it.
