@@ -4,25 +4,32 @@ import notify
 
 struct Failure: LocalizedError { var errorDescription: String? }
 
-let service = "gui/\(getuid())/\(LaunchAgent.agent.rawValue)"
+func service(_ agent: LaunchAgent) -> String { "gui/\(getuid())/\(agent.rawValue)" }
 
-func agentService() -> (loaded: Bool, running: Bool) {
-    let print = run(["/bin/launchctl", "print", service])
-    return (print.ok, print.output.contains("state = running"))
+func launchdJob(_ agent: LaunchAgent) -> (loaded: Bool, pid: Int32?) {
+    let print = run(["/bin/launchctl", "print", service(agent)])
+    return (print.ok, launchdPID(print: print.output))
 }
 
-func ensureAgentInstalled() throws {
-    guard let agent = Bundle.main.url(forAuxiliaryExecutable: "homeawake-agent") else {
-        throw Failure(errorDescription: "The HomeAwake agent is missing from the app.")
+/// True when it loaded the job, which RunAtLoad then starts.
+func ensureInstalled(_ agent: LaunchAgent) throws -> Bool {
+    guard let executable = Bundle.main.url(forAuxiliaryExecutable: agent.executable) else {
+        throw Failure(errorDescription: "\(agent.executable) is missing from the app.")
     }
-    let changed = try writeIfChanged(launchAgentPlist(.agent, executablePath: agent.path), to: LaunchAgent.agent.plistFile)
-    let loaded = agentService().loaded
-    guard changed || !loaded else { return }
-    if loaded { run(["/bin/launchctl", "bootout", service]) }
-    guard run(["/bin/launchctl", "bootstrap", "gui/\(getuid())", LaunchAgent.agent.plistFile.path]).ok else {
-        throw Failure(errorDescription: "launchctl could not load the HomeAwake agent.")
+    let changed = try writeIfChanged(launchAgentPlist(agent, executablePath: executable.path), to: agent.plistFile)
+    let loaded = launchdJob(agent).loaded
+    guard changed || !loaded else { return false }
+    if loaded { run(["/bin/launchctl", "bootout", service(agent)]) }
+    guard run(["/bin/launchctl", "bootstrap", "gui/\(getuid())", agent.plistFile.path]).ok else {
+        throw Failure(errorDescription: "launchctl could not load \(agent.rawValue).")
     }
-    for _ in 0..<20 where !FileManager.default.fileExists(atPath: Files.status.path) { usleep(100_000) }
+    return true
+}
+
+/// Deletes the plist first, because booting out the menu app ends this process.
+func uninstall(_ agent: LaunchAgent) {
+    try? FileManager.default.removeItem(at: agent.plistFile)
+    run(["/bin/launchctl", "bootout", service(agent)])
 }
 
 func updatePrefs(_ change: (inout Prefs) -> Void) throws {
@@ -32,7 +39,7 @@ func updatePrefs(_ change: (inout Prefs) -> Void) throws {
     requestReconcile()
 }
 
-/// The agent applies a request after this returns, so wait briefly for its new status before redrawing the window.
+/// The agent applies a request after this returns, so wait briefly for its new status before redrawing.
 func requestReconcile() {
     let before = try? Data(contentsOf: Files.status)
     notify_post(reconcileRequested)
@@ -53,58 +60,125 @@ func setUpLidMode() throws {
 }
 
 func remove() {
-    run(["/bin/launchctl", "bootout", service])
-    try? FileManager.default.removeItem(at: LaunchAgent.agent.plistFile)
-    guard var status = load(AgentStatus.self, from: Files.status), status.ownsSleepSwitch else { return }
-    status.ownsSleepSwitch = updateSleepSwitch(stayAwake: false, owned: true).owned
-    try? save(status, to: Files.status)
+    uninstall(.agent)
+    if var status = load(AgentStatus.self, from: Files.status), status.ownsSleepSwitch {
+        status.ownsSleepSwitch = updateSleepSwitch(stayAwake: false, owned: true).owned
+        _ = try? save(status, to: Files.status)
+    }
+    uninstall(.menu)
 }
 
-NSApplication.shared.setActivationPolicy(.regular)
-NSApp.activate()
+func carryOut(_ action: MenuAction) throws {
+    switch action {
+    case .useAsHome(let network): try updatePrefs { $0.homes.insert(network) }
+    case .forgetHome(let network): try updatePrefs { $0.homes.remove(network) }
+    case .pause: try updatePrefs { $0.enabled = false }
+    case .resume: try updatePrefs { $0.enabled = true }
+    case .setUpLidMode: try setUpLidMode()
+    case .hideIcon: uninstall(.menu); exit(0)
+    case .remove: remove(); exit(0)
+    }
+}
 
-var problem: String?
-do { try ensureAgentInstalled() } catch { problem = error.localizedDescription }
-// The agent remembers a denied sudo rule until a reconcile request, so this picks up a rule another tool installed.
-notify_post(reconcileRequested)
-
-while true {
-    let prefs = load(Prefs.self, from: Files.prefs) ?? Prefs()
-    let snapshot = load(AgentStatus.self, from: Files.status)?.snapshot
-    let network = lookUpRouter()?.network
-    let lidMode = sudoGrantsLidMode()
-
+@MainActor func showAlert(_ message: String) {
+    NSApp.activate()
     let alert = NSAlert()
-    alert.messageText = switch (agentService().running, snapshot) {
-    case (false, _): "The HomeAwake agent is not running."
-    case (true, nil): "HomeAwake is starting."
-    case let (true, snapshot?):
-        // The agent skips the lookup while paused or on battery, so its snapshot can lack the network found here.
-        statusLine(decide(Snapshot(power: snapshot.power, network: network), prefs),
-                   sleepDisabled: rootDomainFlag("SleepDisabled"))
-    }
-    alert.informativeText = [problem, infoLine(network: network, lidModeAvailable: lidMode)]
-        .compactMap { $0 }.joined(separator: "\n\n")
-    problem = nil
+    alert.messageText = message
+    alert.runModal()
+}
 
-    var actions: [() throws -> Void] = []
-    func offer(_ title: String, _ action: @escaping () throws -> Void) {
-        alert.addButton(withTitle: title)
-        actions.append(action)
+@MainActor final class StatusMenu: NSObject, NSMenuDelegate, NSApplicationDelegate {
+    let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+    var lidModeAvailable = false
+
+    override init() {
+        super.init()
+        item.menu = NSMenu()
+        item.menu?.delegate = self
+        showIcon(state(lookUp: false))
     }
-    offer("Done") { exit(0) }
-    if let network {
-        if prefs.homes.contains(network) {
-            offer("Forget this home network") { try updatePrefs { $0.homes.remove(network) } }
-        } else {
-            offer("Use this network as home") { try updatePrefs { $0.homes.insert(network) } }
+
+    /// Without `lookUp` it spawns no arp or sudo, takes the network from the agent's status, and keeps the last known
+    /// lid-closed mode. The icon needs nothing more.
+    func state(lookUp: Bool) -> MenuState {
+        let prefs = HomeAwakeCore.load(Prefs.self, from: Files.prefs) ?? Prefs()
+        let status = HomeAwakeCore.load(AgentStatus.self, from: Files.status)
+        // The agent skips the lookup while paused or on battery, so its snapshot can lack the network found here.
+        let network = lookUp ? lookUpRouter()?.network : status?.snapshot.network
+        if lookUp { lidModeAvailable = sudoGrantsLidMode() }
+        return MenuState(
+            decision: status.map { decide(Snapshot(power: $0.snapshot.power, network: network), prefs) },
+            agentRunning: launchdJob(.agent).pid != nil, sleepDisabled: rootDomainFlag("SleepDisabled"),
+            network: network, isHome: network.map(prefs.homes.contains) ?? false, enabled: prefs.enabled,
+            lidModeAvailable: lidModeAvailable)
+    }
+
+    func showIcon(_ state: MenuState) {
+        item.button?.image = NSImage(systemSymbolName: iconSymbol(state), accessibilityDescription: "HomeAwake")
+    }
+
+    func openMenu() { item.button?.performClick(nil) }
+
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        // The agent remembers a denied sudo rule until a reconcile request, so this picks up a rule another tool
+        // installed.
+        notify_post(reconcileRequested)
+        let state = state(lookUp: true)
+        showIcon(state)
+        menu.items = menuRows(state).map { row in
+            switch row {
+            case .separator: return .separator()
+            case .info(let text): return NSMenuItem(title: text, action: nil, keyEquivalent: "")
+            case .action(let title, let action):
+                let item = NSMenuItem(title: title, action: #selector(choose(_:)), keyEquivalent: "")
+                item.target = self
+                item.representedObject = action
+                return item
+            }
         }
     }
-    offer(prefs.enabled ? "Pause" : "Resume") { try updatePrefs { $0.enabled.toggle() } }
-    if !lidMode { offer("Set up lid-closed mode…", setUpLidMode) }
-    offer("Remove HomeAwake") { remove(); exit(0) }
-    alert.buttons.last?.hasDestructiveAction = true
 
-    let choice = alert.runModal().rawValue - NSApplication.ModalResponse.alertFirstButtonReturn.rawValue
-    do { try actions[choice]() } catch { problem = error.localizedDescription }
+    @objc func choose(_ sender: NSMenuItem) {
+        guard let action = sender.representedObject as? MenuAction else { return }
+        do { try carryOut(action) } catch { showAlert(error.localizedDescription) }
+        showIcon(state(lookUp: false))
+    }
+
+    /// Opening the app while this instance runs can reach it as a reopen event instead of a second process.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
+        openMenu()
+        return false
+    }
 }
+
+_ = NSApplication.shared
+var readyToken = Int32(0), ready = Int32(0)
+notify_register_check(menuReady, &readyToken)
+// The first check after registering always reports a post.
+notify_check(readyToken, &ready)
+
+if launchdJob(.menu).pid != getpid() {
+    do {
+        if try ensureInstalled(.agent) {
+            for _ in 0..<20 where !FileManager.default.fileExists(atPath: Files.status.path) { usleep(100_000) }
+        }
+        if try ensureInstalled(.menu) {
+            ready = 0
+            for _ in 0..<30 where ready == 0 { usleep(100_000); notify_check(readyToken, &ready) }
+        }
+        notify_post(menuRequested)
+    } catch {
+        showAlert(error.localizedDescription)
+    }
+    exit(0)
+}
+
+let menu = StatusMenu()
+NSApp.delegate = menu
+var token = Int32(0)
+notify_register_dispatch(statusChanged, &token, .main) { _ in
+    MainActor.assumeIsolated { menu.showIcon(menu.state(lookUp: false)) }
+}
+notify_register_dispatch(menuRequested, &token, .main) { _ in MainActor.assumeIsolated { menu.openMenu() } }
+notify_post(menuReady)
+NSApp.run()
