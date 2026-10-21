@@ -41,7 +41,7 @@ public struct NetworkID: Hashable, Codable, Sendable {
     }
 }
 
-/// What the agent last observed. It is also the content of status.json.
+/// What the agent last observed.
 public struct Snapshot: Equatable, Codable, Sendable {
     public var power: PowerSource
     public var network: NetworkID?
@@ -51,6 +51,18 @@ public struct Snapshot: Equatable, Codable, Sendable {
         self.power = power
         self.network = network
         self.lidClosed = lidClosed
+    }
+}
+
+/// The content of status.json. The agent reads `ownsSleepSwitch` back at launch, so a crash or restart still knows
+/// whose switch it is.
+public struct AgentStatus: Equatable, Codable, Sendable {
+    public var snapshot: Snapshot
+    public var ownsSleepSwitch: Bool
+
+    public init(snapshot: Snapshot, ownsSleepSwitch: Bool) {
+        self.snapshot = snapshot
+        self.ownsSleepSwitch = ownsSleepSwitch
     }
 }
 

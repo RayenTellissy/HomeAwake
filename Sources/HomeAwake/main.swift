@@ -46,10 +46,15 @@ func setUpLidMode() throws {
     notify_post(prefsChanged)
 }
 
-func remove(lidMode: Bool) {
+func remove() {
     run(["/bin/launchctl", "bootout", service])
     try? FileManager.default.removeItem(at: Files.launchAgent)
-    if lidMode { run(["/usr/bin/sudo", "-n"] + Pmset.allowSleep) }
+    // A running agent gives the switch back on SIGTERM. This covers one that was not running.
+    if var status = load(AgentStatus.self, from: Files.status), status.ownsSleepSwitch,
+       run(["/usr/bin/sudo", "-n"] + Pmset.allowSleep).ok {
+        status.ownsSleepSwitch = false
+        try? save(status, to: Files.status)
+    }
 }
 
 NSApplication.shared.setActivationPolicy(.regular)
@@ -60,7 +65,7 @@ do { try installAgent() } catch { problem = error.localizedDescription }
 
 while true {
     let prefs = load(Prefs.self, from: Files.prefs) ?? Prefs()
-    let snapshot = load(Snapshot.self, from: Files.status)
+    let snapshot = load(AgentStatus.self, from: Files.status)?.snapshot
     let lidMode = lidModeInstalled()
 
     let alert = NSAlert()
@@ -87,7 +92,7 @@ while true {
     }
     offer(prefs.enabled ? "Pause" : "Resume") { try updatePrefs { $0.enabled.toggle() } }
     if !lidMode { offer("Set up lid-closed mode…", setUpLidMode) }
-    offer("Remove HomeAwake") { remove(lidMode: lidMode); exit(0) }
+    offer("Remove HomeAwake") { remove(); exit(0) }
     alert.buttons.last?.hasDestructiveAction = true
 
     let choice = alert.runModal().rawValue - NSApplication.ModalResponse.alertFirstButtonReturn.rawValue

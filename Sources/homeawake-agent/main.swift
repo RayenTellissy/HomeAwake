@@ -15,6 +15,8 @@ let ipv4Key = "State:/Network/Global/IPv4" as CFString
 let store = SCDynamicStoreCreate(nil, "homeawake-agent" as CFString, { _, _, _ in reconcile() }, nil)!
 var assertion: IOPMAssertionID?
 var arpRetry: DispatchWorkItem?
+var ownsSleepSwitch = load(AgentStatus.self, from: Files.status)?.ownsSleepSwitch ?? false
+var observed: Snapshot?
 
 func rootDomainFlag(_ key: String) -> Bool {
     IORegistryEntryCreateCFProperty(rootDomain, key as CFString, kCFAllocatorDefault, 0)?.takeRetainedValue() as? Bool
@@ -30,7 +32,7 @@ func sudo(_ command: [String]) -> Bool {
 
 /// Converges the system on one decision. It compares against the real state every time, so repeating it changes
 /// nothing.
-func apply(stayAwake: Bool, lidClosed: Bool) {
+func apply(stayAwake: Bool, lidClosed: Bool, terminating: Bool = false) {
     if stayAwake, assertion == nil {
         var id = IOPMAssertionID(0)
         let result = IOPMAssertionCreateWithName(
@@ -44,9 +46,26 @@ func apply(stayAwake: Bool, lidClosed: Bool) {
         IOPMAssertionRelease(id)
         assertion = nil
     }
-    guard rootDomainFlag("SleepDisabled") != stayAwake, lidModeInstalled() else { return }
-    // Without the explicit sleep, a Mac unplugged with the lid shut stays awake in a bag.
-    if sudo(stayAwake ? Pmset.preventSleep : Pmset.allowSleep), !stayAwake, lidClosed { sudo(Pmset.sleepNow) }
+    let plan = planSleepSwitch(stayAwake: stayAwake, sleepDisabled: rootDomainFlag("SleepDisabled"),
+                               owned: ownsSleepSwitch, canWrite: lidModeInstalled(), lidClosed: lidClosed,
+                               terminating: terminating)
+    if let value = plan.write, !sudo(value ? Pmset.preventSleep : Pmset.allowSleep) { return }
+    ownsSleepSwitch = plan.owned
+    if plan.sleepNow { sleepNow() }
+}
+
+func sleepNow() {
+    let powerManagement = IOPMFindPowerManagement(mach_port_t(MACH_PORT_NULL))
+    defer { IOServiceClose(powerManagement) }
+    let result = IOPMSleepSystem(powerManagement)
+    if result != kIOReturnSuccess { NSLog("Sleep request failed: %d", result) }
+}
+
+func saveStatus() {
+    guard let observed else { return }
+    do { try save(AgentStatus(snapshot: observed, ownsSleepSwitch: ownsSleepSwitch), to: Files.status) } catch {
+        NSLog("Could not write status: %@", "\(error)")
+    }
 }
 
 func reconcile(arpAttempt: Int = 0) {
@@ -58,8 +77,9 @@ func reconcile(arpAttempt: Int = 0) {
     let power: PowerSource = providing?.takeUnretainedValue() as String? == kIOPMACPowerKey ? .ac : .battery
     let snapshot = Snapshot(power: power, network: network, lidClosed: rootDomainFlag("AppleClamshellState"))
     let prefs = load(Prefs.self, from: Files.prefs) ?? Prefs()
+    observed = snapshot
     apply(stayAwake: decide(snapshot, prefs) == .stayAwake, lidClosed: snapshot.lidClosed)
-    do { try save(snapshot, to: Files.status) } catch { NSLog("Could not write status: %@", "\(error)") }
+    saveStatus()
     // A network that just came up often has a router before the router has an ARP entry.
     if router != nil, network == nil, arpAttempt < 4 {
         let retry = DispatchWorkItem { reconcile(arpAttempt: arpAttempt + 1) }
@@ -93,7 +113,8 @@ signal(SIGTERM, SIG_IGN)
 let terminate = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
 terminate.setEventHandler {
     // Logout and shutdown send SIGTERM too, and a forced sleep then would cut off a remote restart.
-    apply(stayAwake: false, lidClosed: false)
+    apply(stayAwake: false, lidClosed: false, terminating: true)
+    saveStatus()
     exit(0)
 }
 terminate.resume()

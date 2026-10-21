@@ -73,6 +73,28 @@ let cafe = NetworkID(mac: "00:11:22:33:44:55")!
     #expect(try modified() != old)
 }
 
+@Test func statusFileText() throws {
+    let url = FileManager.default.temporaryDirectory.appending(path: "homeawake-\(UUID())/status.json")
+    defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+
+    let status = AgentStatus(snapshot: Snapshot(power: .ac, network: home, lidClosed: true), ownsSleepSwitch: true)
+    try save(status, to: url)
+    #expect(try String(contentsOf: url, encoding: .utf8) == """
+        {
+          "ownsSleepSwitch" : true,
+          "snapshot" : {
+            "lidClosed" : true,
+            "network" : "c4:0f:5e:10:07:c0",
+            "power" : "ac"
+          }
+        }
+        """)
+    #expect(load(AgentStatus.self, from: url) == status)
+
+    try Data(#"{"power": "ac", "lidClosed": false}"#.utf8).write(to: url)
+    #expect(load(AgentStatus.self, from: url) == nil)
+}
+
 @Test func sudoersRuleText() {
     #expect(sudoersRule(user: "ryan") == "ryan ALL=(root) NOPASSWD: /usr/bin/pmset -a disablesleep 0, "
         + "/usr/bin/pmset -a disablesleep 1, /usr/bin/pmset sleepnow")
