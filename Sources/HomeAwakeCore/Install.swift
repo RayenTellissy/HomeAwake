@@ -4,12 +4,11 @@ public let agentLabel = "dev.homeawake.agent"
 public let sudoersPath = "/etc/sudoers.d/homeawake"
 
 /// The exact argument vectors the sudoers rule allows.
-public enum Pmset {
-    public static let allowSleep = ["/usr/bin/pmset", "-a", "disablesleep", "0"]
-    public static let preventSleep = ["/usr/bin/pmset", "-a", "disablesleep", "1"]
+enum Pmset {
+    static func disablesleep(_ on: Bool) -> [String] { ["/usr/bin/pmset", "-a", "disablesleep", on ? "1" : "0"] }
 
     /// Spelled the same way in the sudoers file and in `sudo -l` output.
-    static let ruleCommands = [allowSleep, preventSleep].map { $0.joined(separator: " ") }
+    static let ruleCommands = [false, true].map { disablesleep($0).joined(separator: " ") }
 }
 
 /// Nil for a user name that sudoers or the shell would need escaped.

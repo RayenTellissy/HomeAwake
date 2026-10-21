@@ -100,7 +100,8 @@ agent, and HomeAwake pays it only at home on AC power.
 - `~/Library/Application Support/HomeAwake/prefs.json` holds your home networks and the pause switch. Only the app
   writes it.
 - `~/Library/Application Support/HomeAwake/status.json` holds what the agent last saw and whether HomeAwake owns
-  `disablesleep`. Only the agent writes it, and only when that changes.
+  `disablesleep`. The agent writes it, and only when that changes. **Remove HomeAwake** also writes it when the agent
+  was not running to turn the switch off itself.
 
 ## Remove HomeAwake
 

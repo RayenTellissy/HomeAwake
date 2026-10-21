@@ -36,6 +36,20 @@ public func sudoGrantsLidMode() -> Bool {
     grantsLidMode(sudoList: run(["/usr/bin/sudo", "-n", "-l"]).output)
 }
 
+/// Plans against the switch as it is now and runs the write with `sudo -n`. Returns the new ownership, and whether this
+/// call just turned off the switch HomeAwake owned.
+public func updateSleepSwitch(stayAwake: Bool, owned: Bool) -> (owned: Bool, released: Bool) {
+    let plan = planSleepSwitch(stayAwake: stayAwake, sleepDisabled: rootDomainFlag("SleepDisabled"), owned: owned,
+                               canWrite: sudoGrantsLidMode())
+    guard let value = plan.write else { return (plan.owned, false) }
+    let command = ["/usr/bin/sudo", "-n"] + Pmset.disablesleep(value)
+    guard run(command).ok else {
+        NSLog("%@ failed", command.joined(separator: " "))
+        return (owned, false)
+    }
+    return (plan.owned, !value)
+}
+
 /// Runs a program to completion. `ok` means it exited with status 0.
 /// Plain posix_spawn: Foundation's Process leaves a helper thread and about 270 KB resident in the agent.
 @discardableResult

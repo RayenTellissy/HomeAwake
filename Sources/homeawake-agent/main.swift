@@ -17,13 +17,6 @@ var arpRetry: DispatchWorkItem?
 var ownsSleepSwitch = load(AgentStatus.self, from: Files.status)?.ownsSleepSwitch ?? false
 var observed: Snapshot?
 
-@discardableResult
-func sudo(_ command: [String]) -> Bool {
-    let ok = run(["/usr/bin/sudo", "-n"] + command).ok
-    if !ok { NSLog("sudo -n %@ failed", command.joined(separator: " ")) }
-    return ok
-}
-
 /// True when it just turned off the switch HomeAwake owned.
 @discardableResult
 func apply(stayAwake: Bool) -> Bool {
@@ -40,11 +33,9 @@ func apply(stayAwake: Bool) -> Bool {
         IOPMAssertionRelease(id)
         assertion = nil
     }
-    let plan = planSleepSwitch(stayAwake: stayAwake, sleepDisabled: rootDomainFlag("SleepDisabled"),
-                               owned: ownsSleepSwitch, canWrite: sudoGrantsLidMode())
-    if let value = plan.write, !sudo(value ? Pmset.preventSleep : Pmset.allowSleep) { return false }
-    ownsSleepSwitch = plan.owned
-    return plan.write == false
+    let update = updateSleepSwitch(stayAwake: stayAwake, owned: ownsSleepSwitch)
+    ownsSleepSwitch = update.owned
+    return update.released
 }
 
 func sleepNow() {

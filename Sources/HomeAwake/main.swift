@@ -50,12 +50,7 @@ func remove() {
     run(["/bin/launchctl", "bootout", service])
     try? FileManager.default.removeItem(at: Files.launchAgent)
     guard var status = load(AgentStatus.self, from: Files.status), status.ownsSleepSwitch else { return }
-    let plan = planSleepSwitch(stayAwake: false, sleepDisabled: rootDomainFlag("SleepDisabled"), owned: true,
-                               canWrite: sudoGrantsLidMode())
-    if let value = plan.write, !run(["/usr/bin/sudo", "-n"] + (value ? Pmset.preventSleep : Pmset.allowSleep)).ok {
-        return
-    }
-    status.ownsSleepSwitch = plan.owned
+    status.ownsSleepSwitch = updateSleepSwitch(stayAwake: false, owned: true).owned
     try? save(status, to: Files.status)
 }
 
