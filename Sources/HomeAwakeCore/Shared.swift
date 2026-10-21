@@ -1,4 +1,5 @@
 import Foundation
+import IOKit
 
 public let reconcileRequested = "dev.homeawake.reconcile"
 
@@ -22,6 +23,13 @@ public func save(_ value: some Encodable, to url: URL) throws {
     guard (try? Data(contentsOf: url)) != data else { return }
     try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
     try data.write(to: url, options: .atomic)
+}
+
+private let rootDomain = IOServiceGetMatchingService(kIOMainPortDefault, IOServiceMatching("IOPMrootDomain"))
+
+public func rootDomainFlag(_ key: String) -> Bool {
+    IORegistryEntryCreateCFProperty(rootDomain, key as CFString, kCFAllocatorDefault, 0)?.takeRetainedValue() as? Bool
+        ?? false
 }
 
 public func sudoGrantsLidMode() -> Bool {

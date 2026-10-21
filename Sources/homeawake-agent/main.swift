@@ -10,18 +10,12 @@ let canSystemSleep: UInt32 = 0xE000_0270
 let systemWillSleep: UInt32 = 0xE000_0280
 let systemHasPoweredOn: UInt32 = 0xE000_0300
 
-let rootDomain = IOServiceGetMatchingService(kIOMainPortDefault, IOServiceMatching("IOPMrootDomain"))
 let ipv4Key = "State:/Network/Global/IPv4" as CFString
 let store = SCDynamicStoreCreate(nil, "homeawake-agent" as CFString, { _, _, _ in reconcile() }, nil)!
 var assertion: IOPMAssertionID?
 var arpRetry: DispatchWorkItem?
 var ownsSleepSwitch = load(AgentStatus.self, from: Files.status)?.ownsSleepSwitch ?? false
 var observed: Snapshot?
-
-func rootDomainFlag(_ key: String) -> Bool {
-    IORegistryEntryCreateCFProperty(rootDomain, key as CFString, kCFAllocatorDefault, 0)?.takeRetainedValue() as? Bool
-        ?? false
-}
 
 @discardableResult
 func sudo(_ command: [String]) -> Bool {
