@@ -99,8 +99,9 @@ Measured on a MacBook Pro with Apple M5 and macOS 26.6:
 - Idle wakeups over 60 seconds were 0 in every run.
 - CPU time over 70 seconds was `00:00.01` in `top` in every run, which is its smallest step of 10 ms.
 
-The menu bar icon costs more than the agent, because it links AppKit. Measured on the same Mac, it used TODO KB
-`phys_footprint` and TODO idle wakeups per minute.
+The menu bar icon costs more than the agent, because it links AppKit. Measured on the same Mac as launchd runs it,
+after its menu had been opened once, it used 14 MB `phys_footprint`, 0 idle wakeups over 60 seconds, and 0.01 s of
+CPU in that minute. Hide menu bar icon gives that memory back, and the agent keeps working.
 
 Keeping a Mac awake uses more wall power than letting it sleep. That cost comes from the awake Mac, not from the
 agent, and HomeAwake pays it only at home on AC power.
