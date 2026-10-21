@@ -1,6 +1,13 @@
 import Foundation
 
-public let agentLabel = "dev.homeawake.agent"
+public enum LaunchAgent: String, Sendable {
+    case agent = "dev.homeawake.agent"
+    case menu = "dev.homeawake.menu"
+
+    public var executable: String { self == .agent ? "homeawake-agent" : "HomeAwake" }
+    public var plistFile: URL { URL.libraryDirectory.appending(path: "LaunchAgents/\(rawValue).plist") }
+}
+
 let sudoersPath = "/etc/sudoers.d/homeawake"
 
 /// The exact argument vectors the sudoers rule allows.
@@ -46,13 +53,17 @@ public func installScript(user: String) -> String? {
     return #"do shell script "\#(quoted)" with administrator privileges"#
 }
 
-public func launchAgentPlist(agentPath: String) throws -> Data {
-    let plist: [String: Any] = [
-        "Label": agentLabel,
-        "ProgramArguments": [agentPath],
-        "RunAtLoad": true,
-        "KeepAlive": true,
-        "ProcessType": "Background",
-    ]
+/// The menu app restarts after a crash but not after a deliberate quit, and only in a login session with a menu bar.
+public func launchAgentPlist(_ agent: LaunchAgent, executablePath: String) throws -> Data {
+    let keys: [String: Any] = switch agent {
+    case .agent: ["KeepAlive": true, "ProcessType": "Background"]
+    case .menu: ["KeepAlive": ["SuccessfulExit": false], "LimitLoadToSessionType": "Aqua"]
+    }
+    let plist = keys.merging(["Label": agent.rawValue, "ProgramArguments": [executablePath], "RunAtLoad": true]) { $1 }
     return try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0)
+}
+
+/// Reads the top-level `pid = 88428` line of `launchctl print` output, which is there only while the job runs.
+public func launchdPID(print: String) -> Int32? {
+    print.split(separator: "\n").lazy.compactMap { $0.hasPrefix("\tpid = ") ? Int32($0.dropFirst(7)) : nil }.first
 }

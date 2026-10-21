@@ -3,12 +3,17 @@ import IOKit
 import SystemConfiguration
 
 public let reconcileRequested = "dev.homeawake.reconcile"
+/// Posted by the agent after a write that changed status.json.
+public let statusChanged = "dev.homeawake.status"
+/// Asks the menu app that launchd runs to open its menu.
+public let menuRequested = "dev.homeawake.show"
+/// Posted by the menu app that launchd runs once it listens for `menuRequested`.
+public let menuReady = "dev.homeawake.menu.ready"
 
 public enum Files {
     static let support = URL.applicationSupportDirectory.appending(path: "HomeAwake")
     public static let prefs = support.appending(path: "prefs.json")
     public static let status = support.appending(path: "status.json")
-    public static let launchAgent = URL.libraryDirectory.appending(path: "LaunchAgents/\(agentLabel).plist")
 }
 
 public func load<T: Decodable>(_ type: T.Type, from url: URL) -> T? {
@@ -23,10 +28,12 @@ public func writeIfChanged(_ data: Data, to url: URL) throws -> Bool {
     return true
 }
 
-public func save(_ value: some Encodable, to url: URL) throws {
+/// True when the file's bytes changed.
+@discardableResult
+public func save(_ value: some Encodable, to url: URL) throws -> Bool {
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-    _ = try writeIfChanged(encoder.encode(value), to: url)
+    return try writeIfChanged(encoder.encode(value), to: url)
 }
 
 private let rootDomain = IOServiceGetMatchingService(kIOMainPortDefault, IOServiceMatching("IOPMrootDomain"))

@@ -4,7 +4,7 @@ import notify
 
 struct Failure: LocalizedError { var errorDescription: String? }
 
-let service = "gui/\(getuid())/\(agentLabel)"
+let service = "gui/\(getuid())/\(LaunchAgent.agent.rawValue)"
 
 func agentService() -> (loaded: Bool, running: Bool) {
     let print = run(["/bin/launchctl", "print", service])
@@ -15,11 +15,11 @@ func ensureAgentInstalled() throws {
     guard let agent = Bundle.main.url(forAuxiliaryExecutable: "homeawake-agent") else {
         throw Failure(errorDescription: "The HomeAwake agent is missing from the app.")
     }
-    let changed = try writeIfChanged(launchAgentPlist(agentPath: agent.path), to: Files.launchAgent)
+    let changed = try writeIfChanged(launchAgentPlist(.agent, executablePath: agent.path), to: LaunchAgent.agent.plistFile)
     let loaded = agentService().loaded
     guard changed || !loaded else { return }
     if loaded { run(["/bin/launchctl", "bootout", service]) }
-    guard run(["/bin/launchctl", "bootstrap", "gui/\(getuid())", Files.launchAgent.path]).ok else {
+    guard run(["/bin/launchctl", "bootstrap", "gui/\(getuid())", LaunchAgent.agent.plistFile.path]).ok else {
         throw Failure(errorDescription: "launchctl could not load the HomeAwake agent.")
     }
     for _ in 0..<20 where !FileManager.default.fileExists(atPath: Files.status.path) { usleep(100_000) }
@@ -54,7 +54,7 @@ func setUpLidMode() throws {
 
 func remove() {
     run(["/bin/launchctl", "bootout", service])
-    try? FileManager.default.removeItem(at: Files.launchAgent)
+    try? FileManager.default.removeItem(at: LaunchAgent.agent.plistFile)
     guard var status = load(AgentStatus.self, from: Files.status), status.ownsSleepSwitch else { return }
     status.ownsSleepSwitch = updateSleepSwitch(stayAwake: false, owned: true).owned
     try? save(status, to: Files.status)

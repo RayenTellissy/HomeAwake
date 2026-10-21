@@ -74,9 +74,9 @@ func withScratchFile(_ body: (URL) throws -> Void) throws {
         let old = Date(timeIntervalSince1970: 1_000_000)
         let snapshot = Snapshot(power: .ac, network: home)
 
-        try save(snapshot, to: url)
+        #expect(try save(snapshot, to: url) == true)
         try FileManager.default.setAttributes([.modificationDate: old], ofItemAtPath: url.path)
-        try save(snapshot, to: url)
+        #expect(try save(snapshot, to: url) == false)
         #expect(try FileManager.default.attributesOfItem(atPath: url.path)[.modificationDate] as? Date == old)
         #expect(try writeIfChanged(Data(contentsOf: url), to: url) == false)
 
@@ -125,7 +125,7 @@ func withScratchFile(_ body: (URL) throws -> Void) throws {
 }
 
 @Test func launchAgentPlistText() throws {
-    let plist = try launchAgentPlist(agentPath: "/Users/a&b/HomeAwake.app/Contents/MacOS/homeawake-agent")
+    let plist = try launchAgentPlist(.agent, executablePath: "/Users/a&b/HomeAwake.app/Contents/MacOS/homeawake-agent")
     #expect(String(decoding: plist, as: UTF8.self) == """
         <?xml version="1.0" encoding="UTF-8"?>
         <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -147,6 +147,51 @@ func withScratchFile(_ body: (URL) throws -> Void) throws {
         </plist>
 
         """)
+}
+
+@Test func menuLaunchAgentPlistText() throws {
+    let plist = try launchAgentPlist(.menu, executablePath: "/Applications/HomeAwake.app/Contents/MacOS/HomeAwake")
+    #expect(String(decoding: plist, as: UTF8.self) == """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0">
+        <dict>
+        \t<key>KeepAlive</key>
+        \t<dict>
+        \t\t<key>SuccessfulExit</key>
+        \t\t<false/>
+        \t</dict>
+        \t<key>Label</key>
+        \t<string>dev.homeawake.menu</string>
+        \t<key>LimitLoadToSessionType</key>
+        \t<string>Aqua</string>
+        \t<key>ProgramArguments</key>
+        \t<array>
+        \t\t<string>/Applications/HomeAwake.app/Contents/MacOS/HomeAwake</string>
+        \t</array>
+        \t<key>RunAtLoad</key>
+        \t<true/>
+        </dict>
+        </plist>
+
+        """)
+}
+
+@Test func launchdPIDFromPrintOutput() {
+    let running = """
+        gui/501/dev.homeawake.agent = {
+        \tactive count = 1
+        \tstate = running
+        \tendpoints = {
+        \t\tpid = 7
+        \t}
+        \tpid = 88428
+        \timmediate reason = speculative
+        }
+        """
+    #expect(launchdPID(print: running) == 88428)
+    #expect(launchdPID(print: "gui/501/dev.homeawake.menu = {\n\tstate = not running\n\tlast exit code = 0\n}\n")
+        == nil)
 }
 
 @Test func statusLineText() {
