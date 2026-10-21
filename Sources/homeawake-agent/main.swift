@@ -69,7 +69,11 @@ func reconcile(arpAttempt: Int = 0) {
     let snapshot = Snapshot(power: power, network: network, lidClosed: rootDomainFlag("AppleClamshellState"))
     let prefs = load(Prefs.self, from: Files.prefs) ?? Prefs()
     observed = snapshot
-    apply(stayAwake: decide(snapshot, prefs) == .stayAwake, sleepAfterRelease: snapshot.lidClosed)
+    switch decide(snapshot, prefs) {
+    case .hold: break
+    case .stayAwake: apply(stayAwake: true, sleepAfterRelease: snapshot.lidClosed)
+    case .allowSleep: apply(stayAwake: false, sleepAfterRelease: snapshot.lidClosed)
+    }
     saveStatus()
     if router != nil, network == nil, arpAttempt < 4 {
         let retry = DispatchWorkItem { reconcile(arpAttempt: arpAttempt + 1) }

@@ -6,14 +6,22 @@ let home = NetworkID(mac: "c4:0f:5e:10:07:c0")!
 let cafe = NetworkID(mac: "00:11:22:33:44:55")!
 
 @Test func decideChecksReasonsInOrder() {
-    let atHome = Snapshot(power: .ac, network: home, lidClosed: true)
-    #expect(decide(atHome, Prefs(homes: [home])) == .stayAwake)
-    #expect(decide(atHome, Prefs(enabled: false, homes: [home])) == .allowSleep(.paused))
-    #expect(decide(Snapshot(power: .battery, network: home, lidClosed: true), Prefs(enabled: false)) == .allowSleep(.paused))
-    #expect(decide(Snapshot(power: .battery, network: nil, lidClosed: false), Prefs(homes: [home])) == .allowSleep(.onBattery))
-    #expect(decide(Snapshot(power: .ac, network: nil, lidClosed: false), Prefs(homes: [home])) == .allowSleep(.offline))
-    #expect(decide(Snapshot(power: .ac, network: cafe, lidClosed: false), Prefs(homes: [home])) == .allowSleep(.notHome))
-    #expect(decide(atHome, Prefs()) == .allowSleep(.notHome))
+    let homeOnly = Prefs(homes: [home]), paused = Prefs(enabled: false, homes: [home])
+    let rows: [(PowerSource, NetworkID?, Prefs, Decision)] = [
+        (.ac, home, homeOnly, .stayAwake),
+        (.ac, home, paused, .allowSleep(.paused)),
+        (.battery, home, paused, .allowSleep(.paused)),
+        (.battery, home, homeOnly, .allowSleep(.onBattery)),
+        (.battery, nil, homeOnly, .allowSleep(.onBattery)),
+        (.ac, nil, homeOnly, .hold),
+        (.ac, nil, paused, .allowSleep(.paused)),
+        (.ac, cafe, homeOnly, .allowSleep(.notHome)),
+        (.ac, home, Prefs(), .allowSleep(.notHome)),
+    ]
+    for (power, network, prefs, decision) in rows {
+        #expect(decide(Snapshot(power: power, network: network, lidClosed: true), prefs) == decision,
+                "\(power) \(String(describing: network)) \(prefs)")
+    }
 }
 
 @Test func macNormalization() {
@@ -140,8 +148,10 @@ let cafe = NetworkID(mac: "00:11:22:33:44:55")!
     #expect(statusLine(.stayAwake, lidModeAvailable: false)
         == "Awake at home while the lid is open. Closing the lid still sleeps.")
     #expect(statusLine(.allowSleep(.notHome), lidModeAvailable: true) == "Not on a home network. This Mac sleeps normally.")
-    let decisions: [Decision] = [.stayAwake, .allowSleep(.paused), .allowSleep(.onBattery), .allowSleep(.offline),
-                                 .allowSleep(.notHome)]
+    #expect(statusLine(.hold, lidModeAvailable: true)
+        == "No network right now. HomeAwake keeps the Mac as it was until the network is back.")
+    let decisions: [Decision] = [.stayAwake, .allowSleep(.paused), .allowSleep(.onBattery), .allowSleep(.notHome),
+                                 .hold]
     #expect(Set(decisions.map { statusLine($0, lidModeAvailable: false) }).count == decisions.count)
 }
 

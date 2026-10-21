@@ -13,7 +13,7 @@ expect() { [ "$2" = "$3" ] && echo "ok: $1" || { echo "FAIL: $1 (got $2, want $3
 prefs() { printf '%s' "$1" > "$support/prefs.json"; notifyutil -p dev.homeawake.reconcile; sleep 0.5; }
 sleep_disabled() { pmset -g | awk '/SleepDisabled/ {print $2}'; }
 real_status() { stat -f %m "$HOME/Library/Application Support/HomeAwake/status.json" 2>/dev/null || echo absent; }
-start() { CFFIXED_USER_HOME="$home" scripts/sandboxed.sh "$agent" 2>> "$home/stderr" & pid=$!; sleep 1; }
+start() { CFFIXED_USER_HOME="$home" scripts/sandboxed.sh "$@" "$agent" 2>> "$home/stderr" & pid=$!; sleep 1; }
 stop() { kill -TERM $pid; wait $pid && status=0 || status=$?; }
 owns() { grep -c '"ownsSleepSwitch" : true' "$support/status.json" || true; }
 claim() { printf '{"ownsSleepSwitch": true, "snapshot": {"power": "ac", "lidClosed": false}}' > "$support/status.json"; }
@@ -71,6 +71,22 @@ if [ "$before" = 0 ]; then
 else
     echo "skip: ownership rows need SleepDisabled 0, and it is $before"
 fi
+
+clang -dynamiclib -framework SystemConfiguration -o "$home/no-router.dylib" scripts/no-router.c
+printf '%s' "$at_home" > "$support/prefs.json"
+start /usr/bin/env DYLD_INSERT_LIBRARIES="$home/no-router.dylib"
+expect "at home with the router lookup interposed, the agent holds one assertion" "$(assertions)" 1
+touch "$home/no-router"; notifyutil -p dev.homeawake.reconcile; sleep 0.5
+expect "with no router, status.json has no network" "$(grep -c '"network"' "$support/status.json" || true)" 0
+expect "and the agent keeps its assertion" "$(assertions)" 1
+prefs "$paused"
+expect "pausing with no router still releases it" "$(assertions)" 0
+prefs "$at_home"
+expect "resuming with no router does not take it" "$(assertions)" 0
+rm "$home/no-router"; notifyutil -p dev.homeawake.reconcile; sleep 0.5
+expect "the router coming back takes it again" "$(assertions)" 1
+stop
+expect "SIGTERM exits 0" "$status" 0
 
 expect "the real home's status.json is untouched" "$(real_status)" "$real_before"
 expect "SleepDisabled unchanged" "$(sleep_disabled)" "$before"

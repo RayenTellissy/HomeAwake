@@ -73,13 +73,15 @@ public struct Prefs: Codable, Equatable, Sendable {
     }
 }
 
-public enum Decision: Equatable, Sendable { case stayAwake, allowSleep(Reason) }
-public enum Reason: Equatable, Sendable { case paused, onBattery, offline, notHome }
+/// Only a positive signal allows sleep. Without a network, `hold` keeps the Mac as it was, so a router restart or a
+/// Wi-Fi reconnect at home does not put it to sleep.
+public enum Decision: Equatable, Sendable { case stayAwake, allowSleep(Reason), hold }
+public enum Reason: Equatable, Sendable { case paused, onBattery, notHome }
 
 public func decide(_ s: Snapshot, _ p: Prefs) -> Decision {
     guard p.enabled else { return .allowSleep(.paused) }
     guard s.power == .ac else { return .allowSleep(.onBattery) }
-    guard let network = s.network else { return .allowSleep(.offline) }
+    guard let network = s.network else { return .hold }
     return p.homes.contains(network) ? .stayAwake : .allowSleep(.notHome)
 }
 
@@ -89,8 +91,8 @@ public func statusLine(_ decision: Decision, lidModeAvailable: Bool) -> String {
     case .stayAwake: "Awake at home while the lid is open. Closing the lid still sleeps."
     case .allowSleep(.paused): "Paused. This Mac sleeps normally."
     case .allowSleep(.onBattery): "On battery. This Mac sleeps normally."
-    case .allowSleep(.offline): "No network. This Mac sleeps normally."
     case .allowSleep(.notHome): "Not on a home network. This Mac sleeps normally."
+    case .hold: "No network right now. HomeAwake keeps the Mac as it was until the network is back."
     }
 }
 

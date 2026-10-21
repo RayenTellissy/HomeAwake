@@ -2,7 +2,8 @@
 
 HomeAwake keeps a MacBook awake while it is at home on AC power, so remote sessions you start from your phone can
 reach it. With the one-time lid-closed setup, it stays awake with the lid shut too. On battery, on any other network,
-or when paused, the Mac sleeps normally.
+or when paused, the Mac sleeps normally. When the Mac has no network, for example while the router restarts,
+HomeAwake changes nothing until the network is back, so a Mac that was awake at home stays awake.
 
 HomeAwake knows it is home by the MAC address of the Wi-Fi router (the default gateway). macOS lets any app read that
 address without Location permission, unlike the network name.
@@ -90,8 +91,9 @@ agent, and HomeAwake pays it only at home on AC power.
   at home, for example because you closed the lid before lid-closed mode was set up, open the lid to wake it.
 - It does not turn off a `disablesleep` that another tool turned on. While that tool keeps it on, the Mac stays awake
   everywhere, with the lid open or closed.
-- It recognizes home by the router. A full-tunnel VPN that replaces the default route can hide the router, and then
-  HomeAwake treats the Mac as away.
+- It recognizes home by the router. A full-tunnel VPN that replaces the default route can hide the router. HomeAwake
+  then sees no network and keeps the Mac as it was, so a VPN turned on at home keeps the Mac awake, and an agent that
+  starts with the VPN already on lets the Mac sleep normally.
 
 ## Files
 
