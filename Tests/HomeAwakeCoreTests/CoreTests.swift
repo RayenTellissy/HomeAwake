@@ -147,15 +147,15 @@ let cafe = NetworkID(mac: "00:11:22:33:44:55")!
 }
 
 @Test func statusLineText() {
-    #expect(statusLine(.stayAwake, lidModeAvailable: true) == "Awake at home, even with the lid closed.")
-    #expect(statusLine(.stayAwake, lidModeAvailable: false)
+    #expect(statusLine(.stayAwake, sleepDisabled: true) == "Awake at home, even with the lid closed.")
+    #expect(statusLine(.stayAwake, sleepDisabled: false)
         == "Awake at home while the lid is open. Closing the lid still sleeps.")
-    #expect(statusLine(.allowSleep(.notHome), lidModeAvailable: true) == "Not on a home network. This Mac sleeps normally.")
-    #expect(statusLine(.hold, lidModeAvailable: true)
+    #expect(statusLine(.allowSleep(.notHome), sleepDisabled: true) == "Not on a home network. This Mac sleeps normally.")
+    #expect(statusLine(.hold, sleepDisabled: true)
         == "No network right now. HomeAwake keeps the Mac as it was until the network is back.")
     let decisions: [Decision] = [.stayAwake, .allowSleep(.paused), .allowSleep(.onBattery), .allowSleep(.notHome),
                                  .hold]
-    #expect(Set(decisions.map { statusLine($0, lidModeAvailable: false) }).count == decisions.count)
+    #expect(Set(decisions.map { statusLine($0, sleepDisabled: false) }).count == decisions.count)
 }
 
 @Test func infoLineText() {

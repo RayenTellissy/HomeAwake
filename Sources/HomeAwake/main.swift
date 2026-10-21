@@ -69,7 +69,7 @@ while true {
     alert.messageText = switch (agentService().running, snapshot) {
     case (false, _): "The HomeAwake agent is not running."
     case (true, nil): "HomeAwake is starting."
-    case let (true, snapshot?): statusLine(decide(snapshot, prefs), lidModeAvailable: lidMode)
+    case let (true, snapshot?): statusLine(decide(snapshot, prefs), sleepDisabled: rootDomainFlag("SleepDisabled"))
     }
     alert.informativeText = [problem, infoLine(network: snapshot?.network, lidModeAvailable: lidMode)]
         .compactMap { $0 }.joined(separator: "\n\n")
