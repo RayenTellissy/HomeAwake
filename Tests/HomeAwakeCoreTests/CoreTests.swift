@@ -110,8 +110,8 @@ let cafe = NetworkID(mac: "00:11:22:33:44:55")!
     #expect(installScript(user: "a b") == nil)
 }
 
-@Test func launchAgentPlistText() {
-    let plist = launchAgentPlist(agentPath: "/Users/a&b/HomeAwake.app/Contents/MacOS/homeawake-agent")
+@Test func launchAgentPlistText() throws {
+    let plist = try launchAgentPlist(agentPath: "/Users/a&b/HomeAwake.app/Contents/MacOS/homeawake-agent")
     #expect(String(decoding: plist, as: UTF8.self) == """
         <?xml version="1.0" encoding="UTF-8"?>
         <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

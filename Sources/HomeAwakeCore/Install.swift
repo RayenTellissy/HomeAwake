@@ -47,7 +47,7 @@ public func installScript(user: String) -> String? {
     return #"do shell script "\#(quoted)" with administrator privileges"#
 }
 
-public func launchAgentPlist(agentPath: String) -> Data {
+public func launchAgentPlist(agentPath: String) throws -> Data {
     let plist: [String: Any] = [
         "Label": agentLabel,
         "ProgramArguments": [agentPath],
@@ -55,5 +55,5 @@ public func launchAgentPlist(agentPath: String) -> Data {
         "KeepAlive": true,
         "ProcessType": "Background",
     ]
-    return try! PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0)
+    return try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0)
 }

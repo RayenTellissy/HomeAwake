@@ -13,7 +13,7 @@ func agentService() -> (loaded: Bool, running: Bool) {
 
 func ensureAgentInstalled() throws {
     let agent = Bundle.main.executableURL!.deletingLastPathComponent().appending(path: "homeawake-agent")
-    let plist = launchAgentPlist(agentPath: agent.path)
+    let plist = try launchAgentPlist(agentPath: agent.path)
     let loaded = agentService().loaded
     guard (try? Data(contentsOf: Files.launchAgent)) != plist || !loaded else { return }
     if loaded { run(["/bin/launchctl", "bootout", service]) }
