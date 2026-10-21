@@ -26,20 +26,12 @@ public func grantsLidMode(sudoList: String) -> Bool {
 }
 
 /// sudo prints one entry per line for separate sudoers lines, but joins one rule's commands with ", " into one entry.
+/// It wraps long entries only on a terminal, and `run` gives it a pipe.
 func passwordlessRootCommands(_ sudoList: String) -> Set<String> {
-    var entries: [String] = []
-    for line in sudoList.split(separator: "\n") {
-        let text = line.drop(while: \.isWhitespace)
-        if text.hasPrefix("(") {
-            entries.append(String(text))
-        } else if !entries.isEmpty, text.startIndex != line.startIndex {
-            entries[entries.count - 1] += " " + text
-        }
-    }
     let spec = "(root) NOPASSWD: "
-    return Set(entries.flatMap { entry in
-        let flat = entry.split(whereSeparator: \.isWhitespace).joined(separator: " ")
-        return flat.hasPrefix(spec) ? flat.dropFirst(spec.count).components(separatedBy: ", ") : []
+    return Set(sudoList.split(separator: "\n").flatMap { line in
+        let entry = line.drop(while: \.isWhitespace)
+        return entry.hasPrefix(spec) ? entry.dropFirst(spec.count).components(separatedBy: ", ") : []
     })
 }
 

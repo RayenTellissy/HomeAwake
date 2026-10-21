@@ -181,14 +181,8 @@ let sudoListHeader = """
 }
 
 @Test func lidModeFromOneCommaJoinedRule() {
-    let unwrapped = "    (root) NOPASSWD: /usr/bin/pmset -a disablesleep 0, /usr/bin/pmset -a disablesleep 1\n"
-    #expect(grantsLidMode(sudoList: sudoListHeader + unwrapped))
-    let wrapped = """
-            (root) NOPASSWD: /usr/bin/pmset -a disablesleep 0, /usr/bin/pmset -a
-                disablesleep 1
-
-        """
-    #expect(grantsLidMode(sudoList: sudoListHeader + wrapped))
+    let rule = "    (root) NOPASSWD: /usr/bin/pmset -a disablesleep 0, /usr/bin/pmset -a disablesleep 1\n"
+    #expect(grantsLidMode(sudoList: sudoListHeader + rule))
 }
 
 @Test func noLidModeWithoutBothPasswordlessCommands() {
@@ -196,11 +190,6 @@ let sudoListHeader = """
     #expect(!grantsLidMode(sudoList: sudoListHeader + """
             (root) NOPASSWD: /usr/bin/pmset -a disablesleep 1
             (root) /usr/bin/pmset -a disablesleep 0
-
-        """))
-    #expect(!grantsLidMode(sudoList: sudoListHeader + """
-            (root) NOPASSWD: /usr/bin/pmset -a disablesleep 0, /usr/bin/pmset -a
-        disablesleep 1
 
         """))
     #expect(!grantsLidMode(sudoList: sudoListHeader))
