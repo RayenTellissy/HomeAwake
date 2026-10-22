@@ -156,3 +156,7 @@ Both scripts source `scripts/scratch-agent.sh`, which runs the agent through `sc
 `check-agent.sh` reads those lines. `check-agent.sh` also builds `scripts/check-hooks.c` with `clang` and loads it
 into one agent run. The hooks let the script take the router away or replace it with one that has no ARP entry, count
 arp and sudo spawns, and post a power event.
+
+## License
+
+HomeAwake is released under the MIT License. See [LICENSE](LICENSE).
